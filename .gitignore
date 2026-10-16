@@ -3,3 +3,9 @@ data/*
 node_modules/
 .env
 test-results/
+
+dist/
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

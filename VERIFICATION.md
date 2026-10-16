@@ -1,17 +1,25 @@
-# Verification record
+# Upgrade verification — 17 October 2026 (Africa/Lagos)
 
-Completed on 16 October 2026 (Africa/Lagos).
+## Executed commands
 
-- `node --check server.mjs` and `node --check public/app.js`: pass.
-- `node --test tests/*.test.mjs`: **11 passed, 0 failed**. This includes eight integration scenarios, their parent suite and two image-validation tests.
-- `node scripts/verify-math/index.mjs`: **392 assessment/example checks** and **900 log-table cells** pass. The 392 consists of 368 assessment questions and 24 worked examples.
+- npm test: strict TypeScript/application build passed; 24 tests passed, zero failed/cancelled/skipped on the final run.
+- npm run verify-math: active curriculum: 1,624 assessment/worked-example checks, covering 1,600 assessment items and 24 worked examples; 1,000 antilog-table cells passed. The preserved earlier bank audit also passed 392 checks and 900 log-table cells. Full-prompt uniqueness is asserted within each of the 24 new subtopics.
+- Node syntax checks for the updated browser modules passed after final presentation changes.
 
-Integration coverage: pending and removed accounts; registration privilege escalation; administrator approval; direct locked-week API calls; current/past/future terms; teacher class/subject boundaries; private submission uploads and signed-image ownership; forbidden cross-student attachments; resubmission policy; marking and student feedback; server-marked practice and reflection completion; discussion visibility and teacher replies; lesson-note and live-resource publishing; course validation and answer-key privacy; CSRF; password redaction; malformed images; JPEG metadata removal.
+## Automated coverage
 
-Browser checks: school-building sign-in screen and school crest; student, teacher and admin sign-in; student lesson rendering and answer feedback; teacher weekly controls and publishing of a sample text lesson note; admin validation queue and teacher assignments. Student mobile navigation and notes page were inspected at 360 × 800; the DOM reported no document-level horizontal overflow. Temporary viewport overrides were reset.
+Existing approval, ownership, CSRF, teacher subject/class boundaries, term/week locks, reflection completion, image-format rejection and JPEG metadata tests remain passing. New tests cover relational migration/foreign-key constraints, durable sign-in after process restart, daily scheduled releases, quiz answer withholding, whole-attempt grading and retry immutability, mastery bands, score publication/correction, notifications, independent note maxima and resubmission, discussion moderation and direct hidden/locked question-image access, promotion archives, recovery-token replay, weighted-result calculations, private backup/restore, and clean production bootstrap with no sandbox account route or fictional students.
 
-An early browser run found inert navigation buttons because default button types were being treated as form submissions; fixed and rechecked with mobile Notes and More navigation. A subsequent local registration test encountered a transient Windows file-write failure; bounded atomic-rename retries were added and the full suite passed. The final suite also verifies that practice accuracy uses attempted questions while completion coverage requires enough of the full question set.
+The backup test stopped its fixture server, dumped relational rows and local images, restored into a fresh database, checked records/media and confirmed authentication sessions were not restored. All automated tests use newly created fictional test directories.
 
-Not claimed: Lighthouse scores, Android/iOS camera certification, real-device PWA installation, cross-device durability, production hosting/database operation, arbitrary teacher-authored maths correctness, or a complete acceptance pass for the original production-stack specification. See README.md and DECISIONS.md for scope.
+A test-harness port-selection failure selected a port blocked by Fetch. The harness now uses OS-assigned ephemeral ports, and the final full run passed. A shutdown promise issue after the restore test was fixed by recognising an already-stopped child. These were not treated as passed gates before repair.
 
-Browser screenshots are stored under `preview/`.
+## Browser checks actually performed
+
+The upgraded sign-in/sandbox flow, student session/term selectors, daily lesson outline, disabled locked days, quiz/mastery screen and creation of a real ten-question quiz attempt were inspected through browser controls. The teacher workspace and daily publication form were inspected without changing existing students’ work or marks. The viewport was set to 360 × 800 for mobile review; the outline fit without document-level horizontal overflow. The original school logo and building remain in use. The desktop layout and final mobile header were also checked for the handoff.
+
+Browser inspection complements the executed API tests; it is not represented as a full Playwright CI suite, a physical camera test or a Lighthouse/audit certification.
+
+## Unverified deployment boundaries
+
+No live PostgreSQL service or S3 credentials were available, so provider migration/upload/playback and hosted HTTPS gates were not executed. Actual Android/iOS capture, PWA installation, complete upload-rotation/order workflows, captions, malware scanning and school operational retention/accessibility review remain outside this verification. See IMPLEMENTATION_STATUS.md and DEPLOYMENT.md.

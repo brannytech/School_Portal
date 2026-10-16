@@ -1,3 +1,2 @@
-import {db,save} from '../store.mjs';
-save();
-console.log(`Database ready: ${db.users.length} accounts. Existing data preserved.`);
+import {db,save,sql} from '../store.mjs';
+await save();console.log('Database ready: '+db.users.length+' accounts.');await sql.close();

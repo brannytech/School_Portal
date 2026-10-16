@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {curriculum} from '../../curriculum.mjs';
+import {calculate,checkAnswer} from '../../dist/domain.js';
+let checked=0;
+function audit(q){const {operation,args,decimals}=q.proof;const [a,b,c,d]=args;let n;
+ switch(operation){
+ case 'power':n=Array(b).fill(a).reduce((p,v)=>p*v,1);break;
+ case 'base-decode':n=[...a].reverse().reduce((sum,digit,p)=>sum+Number(digit)*b**p,0);break;
+ case 'base-encode':assert.equal(parseInt(q.answer,b),a);checked++;return;
+ case 'cross-base':assert.equal(parseInt(q.answer,c),parseInt(a,b));checked++;return;
+ case 'base-operation':{const value=parseInt(q.answer,c);if(d===0||d===4)assert.equal(value-b,a);if(d===1)assert.equal(value+b,a);if(d===2)assert.equal(value/b,a);if(d===3)assert.equal(value*b,a);checked++;return;}
+ case 'expression':assert(/^[0-9eE+*\/().^\s-]+$/.test(a));n=Function('\"use strict\"; return ('+a.replaceAll('^','**')+')')();break;
+ case 'fractional':n=Math.round(Math.exp(c/b*Math.log(a)));break;
+ case 'index-solve':n=Math.round(Math.log(b)/Math.log(a))-c;break;
+ case 'log':n=Math.log(a)/Math.LN10;break;
+ case 'characteristic':n=Math.floor(Math.log(a)/Math.LN10);break;
+ case 'mantissa':{const log=Math.log(a)/Math.LN10;n=log-Math.floor(log);break;}
+ case 'antilog':n=Math.exp(a*Math.LN10);break;
+ case 'root':n=b===2?Math.sqrt(a):Math.cbrt(a);break;
+ case 'product':n=Array(b).fill(a).reduce((sum,v)=>sum+v,0);break;
+ case 'compound':{n=a;for(let year=0;year<c;year++)n+=n*b/100;break;}
+ case 'decay':{n=a;for(let year=0;year<c;year++)n-=n*b/100;break;}
+ case 'linear':n=d?c/a-b:(c-b)*a;break;
+ case 'inverse':n=a*b/c;break;
+ case 'direct':n=a/b*c;break;
+ case 'partial':n=a+Array(c).fill(b).reduce((sum,v)=>sum+v,0);break;
+ case 'joint':n=a/(b*c);break;
+ case 'formula':for(const y of [3,9,17])assert(Math.abs(b*calculate(q.answer,{y})+c-y)<1e-8);checked++;return;
+ case 'rearrange':n=(a-b)/c;break;
+ case 'perimeter':n=(a-2*b)/2;break;
+ case 'last-term':n=(2*a-b*c)/c;break;
+ case 'energy':n=Math.sqrt(2*a/b);break;
+ case 'factor-subject':n=a/(b+1);break;
+ case 'smaller-root':n=(a-Math.sqrt(a*a-4*b))/2;assert(Math.abs(n*n-a*n+b)<1e-7);break;
+ case 'discriminant':n=b*b-4*a*c;break;
+ case 'axis':n=-b/(2*a);break;
+ case 'quadratic':n=(a*d+b)*d+c;break;
+ default:assert.fail('Missing audit '+operation);
+ }
+ if(decimals!==undefined)n=Number(n.toFixed(decimals));assert(Math.abs(Number(q.answer)-n)<=(q.tolerance||1e-7),q.prompt+' => '+q.answer+' vs '+n);assert(checkAnswer(q,q.answer));checked++;
+}
+for(const week of curriculum){assert.equal(week.quiz.length,20);for(const lesson of week.lessons){assert.equal(lesson.questions.length,60);assert.equal(lesson.questions.filter(q=>q.stage==='diagnostic').length,5);assert.equal(lesson.questions.filter(q=>q.stage==='quiz').length,10);assert(new Set(lesson.questions.map(q=>q.id)).size===60);assert.equal(new Set(lesson.questions.map(q=>q.prompt)).size,60,lesson.title+' has repeated prompts');lesson.questions.forEach(audit);audit(lesson.example);}week.quiz.forEach(audit);}
+let antilogCells=0;for(let row=0;row<100;row++)for(let column=0;column<10;column++){const input=row/100+column/1000,display=Number((10**input).toFixed(3));assert(Math.abs(display-Math.exp(input*Math.LN10))<=.00051);antilogCells++;}
+console.log(JSON.stringify({verifiedInstances:checked,assessmentItems:1600,lessons:24,subtopicItems:60,topicMasteryItems:20}));
+console.log(JSON.stringify({antilogTableCells:antilogCells}));

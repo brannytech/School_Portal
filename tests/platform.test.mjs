@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import {weeks} from '../content.mjs';
+import {curriculum as weeks} from '../curriculum.mjs';
 const dir=path.resolve('test-results','api-'+Date.now());fs.mkdirSync(dir,{recursive:true});
-const port=3200+Math.floor(Math.random()*500);
-const processServer=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir},stdio:['ignore','pipe','pipe']});
-let serverOutput='';processServer.stdout.on('data',b=>serverOutput+=b);processServer.stderr.on('data',b=>serverOutput+=b);
-const root=`http://127.0.0.1:${port}`;
+const port=0;let root='';
+const processServer=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,DEMO_PASSWORD:'Learn@2026!',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
+let serverOutput='';processServer.stdout.on('data',b=>{serverOutput+=b;const match=serverOutput.match(/ready at (http:\/\/127\.0\.0\.1:\d+)/);if(match)root=match[1];});processServer.stderr.on('data',b=>serverOutput+=b);
+
 async function request(route,data,session={},method){const r=await fetch(root+'/api/'+route,{method:method||(data?'POST':'GET'),headers:{'Content-Type':'application/json',Cookie:session.cookie||'','X-CSRF-Token':session.csrf||''},...(data?{body:JSON.stringify(data)}:{})});const json=await r.json();return {status:r.status,value:json,cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 async function login(email){const r=await request('login',{email,password:'Learn@2026!'});assert.equal(r.status,200,JSON.stringify(r.value));return {cookie:r.cookie,csrf:r.value.csrf};}
 const context={class:'SS1',subject:'Mathematics',term:1};
@@ -57,9 +57,9 @@ test('School portal: approval, isolation, content, submissions and teacher workf
   assert.equal((await request('submit',{...context,kind:'note',date:'2026-10-16',frequency:'Daily',files:[fileId]},second)).status,403);
  });
  await t.test('Practice answers are server-marked and completion requires reflection',async()=>{
-  const content=(await request('lesson/1-1',null,student)).value;assert.equal(content.questions.length,12);assert.equal(content.questions[0].answer,undefined);
-  const first=await request('practice',{...context,lesson:'1-1',question:content.questions[0].id,answer:weeks[0].lessons[0].questions[0].answer},student);assert.equal(first.value.progress.accuracy,100);assert.equal(first.value.progress.practiceScore,8);assert.equal(first.value.progress.complete,false);
-  let p;for(let i=0;i<8;i++){const q=content.questions[i],answer=weeks[0].lessons[0].questions[i].answer;p=(await request('practice',{...context,lesson:'1-1',question:q.id,answer},student)).value.progress;}
+  const content=(await request('lesson/1-1',null,student)).value;assert.equal(content.questions.length,60);assert.equal(content.questions[0].answer,undefined);
+  const first=await request('practice',{...context,lesson:'1-1',question:content.questions[5].id,answer:weeks[0].lessons[0].questions[5].answer},student);assert.equal(first.value.progress.accuracy,100);assert.equal(first.value.progress.practiceScore,2);assert.equal(first.value.progress.complete,false);
+  let p;for(let i=0;i<40;i++){const q=content.questions[i],answer=weeks[0].lessons[0].questions[i].answer;p=(await request('practice',{...context,lesson:'1-1',question:q.id,answer},student)).value.progress;}
   assert(p.accuracy>=60);assert.equal(p.complete,false);
   assert.equal((await request('reflection',{...context,lesson:'1-1',learnt:'I learnt how binary place values work. I can convert to decimal.',question:'None for now'},student)).status,200);
   assert.equal((await request('state',null,student)).value.progress.find(p=>p.lesson==='1-1').complete,true);

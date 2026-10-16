@@ -1,0 +1,127 @@
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
+import {db,save,hash,matches,dataDir} from './store.mjs';
+import {weeks} from './content.mjs';
+import {cleanImage} from './images.mjs';
+const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
+const sessions=new Map(),rates=new Map(),uploadTokens=new Map(),secret=randomBytes(32);
+const publicDir=path.resolve('public');fs.mkdirSync(path.join(dataDir,'uploads'),{recursive:true});
+const safeUser=u=>{const {password,...rest}=u;return rest;};
+const fail=(s,m)=>{throw Object.assign(new Error(m),{status:s});};
+const signed=value=>createHmac('sha256',secret).update(value).digest('hex');
+function scoped(u,c,s){return u.role==='ADMIN'||(u.role==='STUDENT'?u.class===c:db.allocations.some(a=>a.teacher===u.id&&a.class===c&&a.subject===s));}
+function course(c,s,t){return db.courses?.[`${c}:${s}:${t}`]||(c==='SS1'&&s==='Mathematics'&&t===1?weeks:[]);}
+function scope(u,c,s){if(!scoped(u,c,s))fail(403,'This class or subject is not assigned to you.');}
+function termAccess(u,c,s,t){scope(u,c,s);if(u.role==='STUDENT'&&(t>(db.currentTerm||1)||db.termLocks.includes(`${c}:${s}:${t}`)))fail(403,'This term is not open.');}
+function lessonAccess(u,c,s,t,id){termAccess(u,c,s,t);const w=Number(String(id).split('-')[0]);if(u.role==='STUDENT'&&!(db.unlocks[`${c}:${s}:${t}`]||[]).includes(w))fail(403,'Your teacher has not unlocked this week.');const week=course(c,s,t).find(v=>v.id===w);if(!week)fail(404,'Lessons have not been added for this week.');return week;}
+const visibleFile=(u,f)=>{if(!scoped(u,f.class,f.subject))return false;if(u.role==='STUDENT'&&(f.term>(db.currentTerm||1)||db.termLocks.includes(`${f.class}:${f.subject}:${f.term}`)))return false;return u.role!=='STUDENT'||f.student===u.id||f.purpose==='question'||f.purpose==='lesson-note';};
+function checkFiles(u,ids,c,s,t,purpose){if(!Array.isArray(ids)||ids.length>10)fail(400,'Choose up to 10 images.');for(const id of ids){const f=db.files.find(f=>f.id===id);if(!f||f.student!==u.id||f.class!==c||f.subject!==s||f.term!==t||f.purpose!==purpose)fail(403,'Invalid attachment.');}}
+function audit(u,action){db.audit.push({id:randomUUID(),user:u.id,action,at:new Date().toISOString()});}
+async function body(req,max=1024*1024){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>max)fail(413,'File or request is too large.');chunks.push(chunk);}return Buffer.concat(chunks);}
+const text=(v,max=5000)=>String(v??'').trim().slice(0,max);
+function needed(v,label){if(!v)fail(400,`${label} is required.`);return v;}
+function urlValue(v){try{const u=new URL(v);if(u.protocol!=='https:')throw Error();return u.href;}catch{fail(400,'Enter a full https:// link.');}}
+const rate=(key,limit)=>{const now=Date.now();const r=rates.get(key)||{n:0,until:now+60000};if(now>r.until){r.n=0;r.until=now+60000;}r.n++;rates.set(key,r);if(r.n>limit)fail(429,'Too many attempts. Please wait a minute.');};
+const server=http.createServer(async(req,res)=>{
+ const url=new URL(req.url,'http://localhost');let session;
+ res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');
+ res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+ function json(value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
+ try{
+ if(!url.pathname.startsWith('/api/')){
+  if(!['GET','HEAD'].includes(req.method))fail(405,'Method not allowed.');
+  const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
+  const types={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
+  res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-cache'});if(req.method==='HEAD')res.end();else fs.createReadStream(file).pipe(res);return;
+ }
+ res.setHeader('Cache-Control','no-store');
+ if(!['GET','HEAD'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Request origin not allowed.');
+ const sid=(req.headers.cookie||'').match(/(?:^|; )lab_session=([^;]+)/)?.[1];session=sessions.get(sid);
+ if(session&&session.expires<Date.now()){sessions.delete(sid);session=null;}
+ let u=session&&db.users.find(v=>v.id===session.user&&v.status==='ACTIVE');
+ const endpoint=url.pathname.slice(5);const method=req.method;
+ let b={};if(['POST','PATCH','DELETE'].includes(method)){if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Expected JSON.');try{b=JSON.parse((await body(req)).toString()||'{}');}catch(e){if(e.status)throw e;fail(400,'Invalid JSON.');}}
+ if(endpoint==='login'&&method==='POST'){
+  rate('login:'+req.socket.remoteAddress,15);const user=db.users.find(v=>v.email.toLowerCase()===text(b.email).toLowerCase());if(!user||!matches(String(b.password||''),user.password))fail(401,'Email or password is incorrect.');if(user.status!=='ACTIVE')fail(403,user.status==='PENDING'?'Your account is awaiting admin approval.':`Your account is ${user.status.toLowerCase()}. Contact the school administrator.`);
+  if(sid)sessions.delete(sid);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');sessions.set(id,{user:user.id,csrf,expires:Date.now()+8*3600000});res.setHeader('Set-Cookie',`lab_session=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==='true'?'; Secure':''}`);json({user:safeUser(user),csrf});return;
+ }
+ if(endpoint==='register'&&method==='POST'){
+  rate('register:'+req.socket.remoteAddress,8);const email=text(b.email,160).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Enter a valid email.');if(db.users.some(v=>v.email===email))fail(409,'This email is already registered.');if(!db.classes.includes(b.class))fail(400,'Choose a valid class.');if(String(b.password||'').length<10)fail(400,'Use at least 10 characters for your password.');
+  const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING'});save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
+ }
+ if(!u)fail(401,'Please sign in to continue.');
+ if(!['GET','HEAD'].includes(method)&&req.headers['x-csrf-token']!==session.csrf)fail(403,'Session check failed. Refresh and try again.');
+ if(endpoint==='logout'&&method==='POST'){sessions.delete(sid);res.setHeader('Set-Cookie','lab_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');json({ok:true});return;}
+ if(endpoint==='me'){json({user:safeUser(u),csrf:session.csrf,currentTerm:db.currentTerm||1,allocations:db.allocations.filter(a=>a.teacher===u.id)});return;}
+ const c=u.role==='STUDENT'?u.class:text(b.class||url.searchParams.get('class')||'SS1');const s=text(b.subject||url.searchParams.get('subject')||'Mathematics');const t=Number(b.term||url.searchParams.get('term')||1);
+ if(![1,2,3].includes(t))fail(400,'Choose a valid term.');
+ if(endpoint==='state'&&method==='GET'){
+  scope(u,c,s);const locked=u.role==='STUDENT'&&(t>(db.currentTerm||1)||db.termLocks.includes(`${c}:${s}:${t}`));
+  const fits=v=>v.class===c&&v.subject===s&&v.term===t;
+  const mine=v=>u.role!=='STUDENT'||v.student===u.id;
+  json({user:safeUser(u),currentTerm:db.currentTerm||1,classes:db.classes,subjects:db.subjects,allocations:db.allocations.filter(a=>u.role==='ADMIN'||a.teacher===u.id),termLocked:locked,
+   weeks:locked?[]:(course(c,s,t).map(({lessons,quiz,...w})=>({...w,unlocked:(db.unlocks[`${c}:${s}:${t}`]||[]).includes(w.id),lessons:lessons.map(({id,title,minutes})=>({id,title,minutes}))}))),
+   assignments:locked?[]:db.assignments.filter(fits),submissions:locked?[]:db.submissions.filter(v=>fits(v)&&mine(v)),progress:locked?[]:db.progress.filter(v=>fits(v)&&mine(v)),reflections:locked?[]:db.reflections.filter(v=>fits(v)&&mine(v)),scores:locked?[]:db.scores.filter(v=>fits(v)&&mine(v)),
+   questions:locked?[]:db.questions.filter(v=>fits(v)&&(u.role!=='STUDENT'||(db.unlocks[`${c}:${s}:${t}`]||[]).includes(Number(v.lesson.split('-')[0])))),resources:locked?[]:db.resources.filter(fits),
+   students:u.role==='ADMIN'?db.users.filter(v=>v.role==='STUDENT').map(safeUser):u.role==='TEACHER'?db.users.filter(v=>v.role==='STUDENT'&&v.class===c).map(safeUser):[],teachers:u.role==='ADMIN'?db.users.filter(v=>v.role==='TEACHER').map(safeUser):[],termLocks:db.termLocks.filter(k=>u.role==='ADMIN'||k.startsWith(`${c}:${s}:`)),audit:u.role==='ADMIN'?db.audit.slice(-30).reverse():[]});return;
+ }
+ if(endpoint.startsWith('lesson/')&&method==='GET'){const id=endpoint.split('/')[1],week=lessonAccess(u,c,s,t,id),lesson=week.lessons.find(v=>v.id===id);if(!lesson)fail(404,'Lesson not found.');const strip=q=>{const {answer,explanation,check,...v}=q;return v;};json({...lesson,example:lesson.example,questions:lesson.questions.map(strip),quiz:week.quiz.map(strip)});return;}
+ if(endpoint==='practice'&&method==='POST'){
+  const week=lessonAccess(u,c,s,t,b.lesson),lesson=week.lessons.find(v=>v.id===b.lesson);if(!lesson)fail(404,'Lesson not found.');const q=[...lesson.questions,...week.quiz].find(v=>v.id===b.question);if(!q)fail(404,'Question not found.');
+  const a=text(b.answer,100).toLowerCase();const correct=a===q.answer.toLowerCase()||(a!==''&&Number.isFinite(Number(a))&&Number.isFinite(Number(q.answer))&&Math.abs(Number(a)-Number(q.answer))<0.00001);
+  let p=db.progress.find(v=>v.student===u.id&&v.lesson===b.lesson&&v.term===t&&v.class===c&&v.subject===s);if(!p){p={student:u.id,lesson:b.lesson,class:c,subject:s,term:t,answers:{},reflectionDone:false};db.progress.push(p);}p.answers[q.id]=correct;p.updated=new Date().toISOString();const answers=lesson.questions.map(q=>p.answers[q.id]),attempted=answers.filter(a=>a!==undefined);p.accuracy=attempted.length?Math.round(attempted.filter(Boolean).length/attempted.length*100):0;p.practiceScore=Math.round(answers.filter(Boolean).length/lesson.questions.length*100);p.complete=p.practiceScore>=60&&p.reflectionDone;save();json({correct,answer:q.answer,explanation:q.explanation,progress:p});return;
+ }
+ if(endpoint==='reflection'&&method==='POST'){
+  const week=lessonAccess(u,c,s,t,b.lesson);if(!week.lessons.some(v=>v.id===b.lesson))fail(404,'Lesson not found.');const learnt=needed(text(b.learnt),'What you learnt'),question=needed(text(b.question),'Your unanswered question (or write “None for now”)');let r=db.reflections.find(v=>v.student===u.id&&v.lesson===b.lesson&&v.term===t&&v.subject===s);if(!r){r={id:randomUUID(),student:u.id,name:u.name,class:c,subject:s,term:t,lesson:b.lesson};db.reflections.push(r);}Object.assign(r,{learnt,question,created:new Date().toISOString()});let p=db.progress.find(v=>v.student===u.id&&v.lesson===b.lesson&&v.term===t&&v.subject===s);if(!p){p={student:u.id,lesson:b.lesson,class:c,subject:s,term:t,answers:{},accuracy:0};db.progress.push(p);}p.reflectionDone=true;p.complete=(p.practiceScore??p.accuracy)>=60;save();json(r);return;
+ }
+ if(endpoint==='question'&&method==='POST'){lessonAccess(u,c,s,t,b.lesson);const files=b.files||[];checkFiles(u,files,c,s,t,'question');if(!text(b.text)&&!files.length)fail(400,'Write a question or attach an image.');const q={id:randomUUID(),student:u.id,name:u.name,class:c,subject:s,term:t,lesson:b.lesson,text:text(b.text),files,replies:[],created:new Date().toISOString()};db.questions.push(q);save();json(q);return;}
+ if(endpoint==='reply'&&method==='POST'){const q=db.questions.find(v=>v.id===b.id);if(!q)fail(404,'Question not found.');lessonAccess(u,q.class,q.subject,q.term,q.lesson);q.replies.push({name:u.name,role:u.role,text:needed(text(b.text),'Reply')});save();json(q);return;}
+ if(endpoint==='submit'&&method==='POST'){
+  if(u.role!=='STUDENT')fail(403,'Only students submit work.');termAccess(u,c,s,t);const kind=b.kind==='note'?'note':'assignment';const files=b.files||[];needed(files.length,'A photo');checkFiles(u,files,c,s,t,kind);let assignment;
+  if(kind==='assignment'){assignment=db.assignments.find(v=>v.id===b.assignment&&v.class===c&&v.subject===s&&v.term===t);if(!assignment)fail(404,'Assignment not found.');}
+  if(kind==='note'&&!/^\d{4}-\d{2}-\d{2}$/.test(b.date||''))fail(400,'Choose a note date.');
+  const prev=db.submissions.find(v=>v.student===u.id&&v.class===c&&v.subject===s&&v.term===t&&v.kind===kind&&(kind==='assignment'?v.assignment===b.assignment:v.date===b.date&&v.frequency===b.frequency));
+  if(prev&&kind==='assignment'&&!assignment.resubmission)fail(409,'Your teacher has not enabled resubmission.');
+  if(prev&&kind==='note'&&prev.status!=='Needs redo')fail(409,'These notes have already been submitted.');
+  const sub=prev||{id:randomUUID(),student:u.id,name:u.name,class:c,subject:s,term:t,kind};Object.assign(sub,{assignment:assignment?.id,date:text(b.date),frequency:b.frequency==='Weekly'?'Weekly':'Daily',files,status:'Submitted',created:new Date().toISOString(),score:null,feedback:''});if(!prev)db.submissions.push(sub);save();json(sub,201);return;
+ }
+ if(endpoint==='upload-token'&&method==='POST'){
+  rate('upload:'+u.id,30);termAccess(u,c,s,t);const purpose=b.purpose;if(!['assignment','note','question','lesson-note'].includes(purpose))fail(400,'Invalid upload purpose.');if(purpose==='lesson-note'&&u.role==='STUDENT')fail(403,'Only teachers upload lesson notes.');const token=randomBytes(32).toString('hex');uploadTokens.set(token,{user:u.id,class:c,subject:s,term:t,purpose,expires:Date.now()+300000});json({url:`/api/upload/${token}`});return;
+ }
+ if(endpoint.startsWith('upload/')&&method==='PUT'){
+  const token=endpoint.split('/')[1],v=uploadTokens.get(token);if(!v||v.user!==u.id||v.expires<Date.now())fail(403,'Upload link expired. Try again.');termAccess(u,v.class,v.subject,v.term);const bytes=await body(req,700*1024);const cleaned=cleanImage(bytes);const id=randomUUID();fs.writeFileSync(path.join(dataDir,'uploads',id),cleaned.bytes);db.files.push({id,student:u.id,class:v.class,subject:v.subject,term:v.term,purpose:v.purpose,type:cleaned.type,size:cleaned.bytes.length});uploadTokens.delete(token);save();json({id});return;
+ }
+ if(endpoint.startsWith('file/')&&method==='GET'){
+  const id=endpoint.split('/')[1],f=db.files.find(v=>v.id===id);if(!f||!visibleFile(u,f))fail(404,'File not found.');const exp=url.searchParams.get('expires'),sig=url.searchParams.get('sig');if(!sig){const expires=Date.now()+120000;json({url:`/api/file/${id}?expires=${expires}&sig=${signed(`${id}:${u.id}:${expires}`)}`});return;}const expected=signed(`${id}:${u.id}:${exp}`);if(Number(exp)<Date.now()||sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))fail(403,'Image link expired.');res.writeHead(200,{'Content-Type':f.type,'Cache-Control':'no-store'});fs.createReadStream(path.join(dataDir,'uploads',id)).pipe(res);return;
+ }
+ // Every management mutation is checked here before any record is changed.
+ if(u.role==='STUDENT')fail(403,'Teacher or administrator access required.');
+ scope(u,c,s);
+ if(endpoint==='course'&&method==='GET'){json(course(c,s,t));return;}
+ if(endpoint==='course'&&method==='POST'){
+  const input=b.weeks;if(!Array.isArray(input)||input.length>20)fail(400,'Provide an array of up to 20 weeks.');
+  const ids=new Set();
+  const validQuestion=q=>q&&typeof q.id==='string'&&typeof q.prompt==='string'&&['string','number'].includes(typeof q.answer)&&typeof q.explanation==='string'&&['numeric','choice','boolean'].includes(q.kind)&&(q.kind!=='choice'||Array.isArray(q.options)&&q.options.map(String).includes(String(q.answer)));
+  for(const w of input){if(!Number.isInteger(w.id)||w.id<1||w.id>52||ids.has(w.id)||typeof w.title!=='string'||!Array.isArray(w.lessons)||w.lessons.length<1||w.lessons.length>7||!Array.isArray(w.quiz)||w.quiz.length<10||!w.quiz.every(validQuestion))fail(400,'Each week needs a unique number, a title, 1–7 lessons and at least 10 valid quiz questions.');ids.add(w.id);const lessonIds=new Set();for(const l of w.lessons){if(typeof l.id!=='string'||!l.id.startsWith(w.id+'-')||lessonIds.has(l.id)||!l.title||!Array.isArray(l.objectives)||!l.explain||!l.realLife||!Array.isArray(l.summary)||!validQuestion(l.example)||!Array.isArray(l.questions)||l.questions.length<12||!l.questions.every(validQuestion))fail(400,'Each lesson needs its week-prefixed ID, title, objectives, explanation, real-life example, summary, worked example and at least 12 valid questions.');lessonIds.add(l.id);const questionIds=l.questions.map(q=>q.id);if(new Set(questionIds).size!==questionIds.length)fail(400,'Question IDs must be unique within a lesson.');}}
+  db.courses??={};db.courses[`${c}:${s}:${t}`]=input;audit(u,`Published ${input.length} content weeks for ${c}:${s}:${t}`);save();json({ok:true});return;
+ }
+ if(endpoint==='unlock'&&method==='POST'){if(!course(c,s,t).some(w=>w.id===Number(b.week)))fail(400,'Invalid week.');const key=`${c}:${s}:${t}`,set=new Set(db.unlocks[key]||[]);if(b.unlocked)set.add(Number(b.week));else set.delete(Number(b.week));db.unlocks[key]=[...set];audit(u,`${b.unlocked?'Unlock':'Lock'} week ${b.week}, ${key}`);save();json({ok:true});return;}
+ if(endpoint==='term-lock'&&method==='POST'){if(u.role!=='ADMIN')fail(403,'Admin access required.');const key=`${c}:${s}:${t}`;db.termLocks=db.termLocks.filter(v=>v!==key);if(b.locked)db.termLocks.push(key);audit(u,`${b.locked?'Lock':'Open'} term ${key}`);save();json({ok:true});return;}
+ if(endpoint==='assignment'&&method==='POST'){const a={id:randomUUID(),class:c,subject:s,term:t,title:needed(text(b.title,200),'Title'),instructions:needed(text(b.instructions),'Instructions'),due:needed(text(b.due,30),'Due date'),teacher:u.id,resubmission:!!b.resubmission};db.assignments.push(a);save();json(a);return;}
+ if(endpoint==='resubmission'&&method==='POST'){const a=db.assignments.find(v=>v.id===b.id);if(!a)fail(404,'Assignment not found.');scope(u,a.class,a.subject);a.resubmission=!!b.enabled;save();json({ok:true});return;}
+ if(endpoint==='mark'&&method==='POST'){const sub=db.submissions.find(v=>v.id===b.id);if(!sub)fail(404,'Submission not found.');scope(u,sub.class,sub.subject);const score=Number(b.score);if(!Number.isFinite(score)||score<0||score>100)fail(400,'Enter a score from 0 to 100.');Object.assign(sub,{score,feedback:needed(text(b.feedback),'Feedback'),status:b.status==='Needs redo'?'Needs redo':'Reviewed',markedAt:new Date().toISOString()});save();json(sub);return;}
+ if(endpoint==='score'&&method==='POST'){const student=db.users.find(v=>v.id===b.student&&v.role==='STUDENT'&&v.class===c);if(!student)fail(400,'Choose a student in this class.');const score=Number(b.score),max=Number(b.max);if(!Number.isFinite(score)||!Number.isFinite(max)||max<=0||score<0||score>max)fail(400,'Check the score and maximum.');db.scores.push({id:randomUUID(),student:student.id,class:c,subject:s,term:t,type:b.type==='Exam'?'Exam':'Test',score,max,remark:text(b.remark)});save();json({ok:true});return;}
+ if(endpoint==='resource'&&method==='POST'){const type=['live','recording','lesson-note'].includes(b.type)?b.type:'recording';const files=b.files||[];if(files.length)checkFiles(u,files,c,s,t,'lesson-note');if(!files.length&&!b.url&&!text(b.text))fail(400,'Add a link, note text or image.');const r={id:randomUUID(),class:c,subject:s,term:t,type,title:needed(text(b.title,200),'Title'),url:b.url?urlValue(b.url):'',text:text(b.text,15000),files,day:text(b.day,30),teacher:u.name,created:new Date().toISOString()};db.resources.push(r);save();json(r);return;}
+ if(endpoint==='reflection-reply'&&method==='POST'){const r=db.reflections.find(v=>v.id===b.id);if(!r)fail(404,'Reflection not found.');scope(u,r.class,r.subject);r.reply=needed(text(b.text),'Feedback');save();json(r);return;}
+ if(u.role!=='ADMIN')fail(403,'Admin access required.');
+ if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);audit(u,`Current term set to ${db.currentTerm}`);save();json({ok:true});return;}
+ if(endpoint==='student-status'&&method==='POST'){const student=db.users.find(v=>v.id===b.id&&v.role==='STUDENT');if(!student||!['ACTIVE','REJECTED','REMOVED','PENDING'].includes(b.status))fail(400,'Invalid student or status.');student.status=b.status;student.reason=text(b.reason);if(b.newClass){if(!db.classes.includes(b.newClass))fail(400,'Invalid class.');student.class=b.newClass;}audit(u,`${student.name}: ${b.status}${b.newClass?' → '+b.newClass:''}`);save();json({ok:true});return;}
+ if(endpoint==='add-user'&&method==='POST'){const email=needed(text(b.email,160).toLowerCase(),'Email');if(db.users.some(v=>v.email===email))fail(409,'Email already exists.');if(String(b.password||'').length<10)fail(400,'Use a password of at least 10 characters.');const user={id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),role:b.role==='TEACHER'?'TEACHER':'STUDENT',status:'ACTIVE',class:c,admission:text(b.admission,80)};db.users.push(user);audit(u,`Added ${user.role}: ${user.name}`);save();json(safeUser(user),201);return;}
+ if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({teacher:b.teacher,class:c,subject:s});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);save();json({ok:true});return;}
+ if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);save();json({ok:true});return;}
+ fail(404,'Endpoint not found.');
+ }catch(e){if(!res.headersSent)json({error:e.status?e.message:'An unexpected error occurred. Please try again.'},e.status||500);else res.end();if(!e.status)console.error(e);}
+});
+server.listen(port,host,()=>console.log(`Olawale's Lab is ready at http://${host}:${port}`));

@@ -39,6 +39,7 @@ for(const a of db.allocations){a.id??=randomBytes(16).toString('hex');a.sessionI
 db.courses??={};
 for(const key of Object.keys(db.courses))if(!key.includes('|')){db.courses[db.currentSessionId+'|'+key]=db.courses[key];delete db.courses[key];}
 const initialKey=db.currentSessionId+'|SS1:Mathematics:1';if(!Object.keys(db.courses).length)db.courses[initialKey]=structuredClone(weeks);if((db.curriculumVersion||0)<3){for(const [key,course]of Object.entries(db.courses))if(key.endsWith('|SS1:Mathematics:1')&&course.length===8&&(course[0].lessons[0].questions[0]?.id==='w1q0'||course[0].lessons[0].questions[0]?.id?.startsWith('bank-'))){db.legacyCourseBackups??={};db.legacyCourseBackups[key]=structuredClone(course);db.courses[key]=structuredClone(weeks);}db.curriculumVersion=3;}
+if((db.curriculumVersion||0)<4){for(const [key,course]of Object.entries(db.courses))if(key.endsWith('|SS1:Mathematics:1')&&course.length===8&&course.every(w=>w.lessons.length===3&&w.lessons[0].questions[0]?.id?.startsWith('bank-'))){course.forEach((w,t)=>{w.lessons.push(...structuredClone(weeks[t].lessons.slice(3)));});}db.curriculumVersion=4;}
 for(const key of Object.keys(db.unlocks))if(!key.includes('|')){db.unlocks[db.currentSessionId+'|'+key]=db.unlocks[key];delete db.unlocks[key];}
 db.termLocks=db.termLocks.map(k=>k.includes('|')?k:db.currentSessionId+'|'+k);
 export async function save(){

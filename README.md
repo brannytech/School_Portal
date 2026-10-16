@@ -20,7 +20,7 @@ Open http://127.0.0.1:3000. Development sandbox role buttons require no hard-cod
 - Replaces JSON persistence with a real relational database and versioned migrations. SQLite runs locally; PostgreSQL is configurable for deployment. Existing local records are imported once and the original JSON file is retained.
 - Academic sessions, enrolment/promotion history, term archives and daily lesson publication/release rules.
 - Durable authentication, suspension, pending administrator-created students and single-use account recovery.
-- Twenty-four SS1 Mathematics lessons, 60 stage-specific questions per subtopic, 20-question topic mastery assessments, independent attempt records and configurable mastery bands. The bank has 1,600 assessment items.
+- Forty SS1 Mathematics lessons (five per topic), 60 stage-specific questions per lesson, 20-question topic mastery assessments sampling all five lessons, independent attempt records and configurable mastery bands. The bank has 2,560 assessment items.
 - Private assignments/notes, note rubrics and configurable marks, resubmission and marking history, in-app feedback notifications.
 - Discussion moderation, reflection drafts/confidence/difficulties, announcements, unpublished results and audited corrections, CSV marks and policy-weighted summaries.
 - Contextual calculator, base/graph/formula tools, genuine log and antilog tables, private document/video storage adapters and backup/restore scripts.

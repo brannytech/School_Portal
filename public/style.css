@@ -10,3 +10,17 @@ body.dark .auth{background:var(--paper)}body.dark .auth-demo{background:var(--so
 .upload-page{padding:10px;border:1px solid var(--line);border-radius:10px}.upload-page .row{gap:5px}.upload-page button{font-size:10px;padding:7px;min-height:36px}.upload-page img{display:block;margin:0 auto 8px}.field input[type=number]{max-width:100%}#calculator-result{display:block}#construction-grid{touch-action:manipulation;cursor:crosshair}
 @media(max-width:700px){.topbar{height:auto;min-height:65px;flex-wrap:wrap;padding:10px 16px}.topbar .breadcrumb{display:none}.topbar>.row{width:100%;gap:5px;flex-wrap:nowrap;justify-content:space-between}.topbar .term-select{width:100px;padding:8px 4px;font-size:9px;flex-shrink:1}.upload-page button{min-height:44px}.auth-form .auth-demo button{min-height:44px}}
 .mobile-school-logo{display:none}@media(max-width:700px){.mobile-school-logo{display:block;width:27px;height:30px;object-fit:contain}.topbar>.row>.avatar{display:none}}
+/* Layout polish: hero copy stays readable over the artwork; consistent section spacing; safer long words */
+.hero-art{z-index:1;pointer-events:none}
+.content>section+section,.content>.section-head{margin-top:28px}
+.grid+.section-head,.dashboard-columns .section-head{margin-top:30px}
+.card,.subject-card,.hero h2{overflow-wrap:anywhere}
+@media(max-width:700px){
+ .hero-art{width:150px;right:-34px;opacity:.28}
+ .hero-copy{max-width:100%}
+ .hero h2{font-size:24px}
+ .subject-card .badge,.subject-card .pill{white-space:nowrap}
+ .dashboard-columns>div>.grid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:focus-visible{outline:3px solid #7aa35a;outline-offset:2px}

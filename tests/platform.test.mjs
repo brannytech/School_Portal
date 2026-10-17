@@ -21,6 +21,8 @@ test('School portal: approval, isolation, content, submissions and teacher workf
   const reg=await request('register',{name:'New Learner',email:'new@test.school',password:'Learn@2026!',class:'SS2',admission:'NEW-001',guardian:'08000000000',role:'ADMIN',status:'ACTIVE'});assert.equal(reg.status,201,serverOutput);
   assert.equal((await request('login',{email:'new@test.school',password:'Learn@2026!'})).status,403);
   const data=(await request('state',null,admin)).value,newUser=data.students.find(u=>u.email==='new@test.school');assert.equal(newUser.role,'STUDENT');assert.equal(newUser.status,'PENDING');
+  assert.equal((await request('student-status',{id:newUser.id,status:'ACTIVE'},admin)).status,400);
+  const initialPhoto=await fetch(root+'/api/profile-photo?student='+newUser.id,{method:'PUT',headers:{Cookie:admin.cookie,'X-CSRF-Token':admin.csrf},body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aG9sAAAAASUVORK5CYII=','base64')});assert.equal(initialPhoto.status,201);
   assert.equal((await request('student-status',{id:newUser.id,status:'ACTIVE'},admin)).status,200);const active=await login('new@test.school');assert.equal((await request('state',null,active)).value.user.class,'SS2');
  });
  await t.test('Weeks and terms are protected through the API',async()=>{

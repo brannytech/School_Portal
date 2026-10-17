@@ -37,3 +37,11 @@ An administrator can also issue a token directly for anyone under **Account acce
 6. Photograph or select assignment/note pages. Review, rotate, remove/retake or reorder pages before submitting. Documents are supported for assignments; note/question capture uses photographs. Your work is private to you and authorised staff.
 7. If a photo upload fails, use Recover queued photos after reconnecting, then attach recovered pages in the matching form and submit explicitly. The app does not promise full offline lessons or silent offline submission. Do not leave private queued material on a shared device.
 8. Read your teacher’s feedback, published scores and notifications. Class questions are shared with your approved classmates; reflections and marks are private. Report a concern to your teacher rather than sharing private information publicly.
+
+## Profile photos and signing out
+
+Select the photo/initials at the top right (or the profile summary in the desktop sidebar) to open your profile. Use **Update profile photo → Save photo** to change your picture, or **Sign out of Olawale’s Lab** to log out. Choose JPEG or PNG; the browser compresses the image before upload.
+
+Administrators must select an **Initial profile photo** when adding an individual student. Student accounts remain pending until approved. For CSV imports and self-registered students, open **School management → Your students → Profile**, upload the initial photo, then approve the account. Existing accounts without photos retain their access and display initials until an admin supplies the initial photo. Students can subsequently update their own photo from Profile.
+
+The light/dark theme button is beside Profile. Both themes use Grace-Field College’s blue and crimson with readable text on neutral backgrounds.

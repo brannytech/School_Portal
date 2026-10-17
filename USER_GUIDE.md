@@ -1,5 +1,14 @@
 # Using Olawale’s Lab
 
+## Forgotten password and recovery tokens
+
+1. On the sign-in page the person chooses **Forgot your password?** and enters their school email. The page always shows the same message, so it never reveals whether an email has an account.
+2. Every active administrator gets a notification, and the request appears under **Admin → Password recovery requests**.
+3. The administrator confirms the person's identity, then selects **Issue recovery token**. The token expires in 30 minutes, works once and signs the account out everywhere. Give it to the person privately (in person or the school's private channel, never a class group).
+4. The person chooses **I have a recovery token** on the sign-in page, pastes the token and sets a new password of at least 14 characters, then signs in. A suspended or pending account stays suspended or pending.
+
+An administrator can also issue a token directly for anyone under **Account access and recovery**.
+
 ## School administrator
 
 1. Sign in with the initial administrator account configured on first production start. Development sandbox access is a separate local feature.

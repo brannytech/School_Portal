@@ -13,7 +13,7 @@ npm run build
 npm start
 ~~~
 
-Open http://127.0.0.1:3000. Development sandbox role buttons require no hard-coded client password. Production is a separate bootstrap with no demonstration users. See [installation and deployment](DEPLOYMENT.md).
+Open http://127.0.0.1:3000. The sign-in page shows no development sandbox unless you set DEMO_MODE=true in .env on a private machine (then, with a fresh DATA_DIR, set DEMO_PASSWORD and sign in as admin@olawaleslab.school). Production is a separate bootstrap with no demonstration users. See [installation and deployment](DEPLOYMENT.md).
 
 ## This upgrade
 

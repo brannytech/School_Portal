@@ -11,7 +11,7 @@ npm run build
 npm start
 ```
 
-Open http://127.0.0.1:3000. Development sandbox buttons enter fictional role accounts without embedding account passwords in the client. Existing user, subject and assignment records are retained. The legacy `data/database.json` is imported only when no relational database exists; the original file is left untouched. Subsequent writes go to `school.sqlite`, not the old JSON file. Stop the old server before upgrading and make a private backup first. Automatic curriculum upgrades keep a private pre-upgrade course snapshot in database settings.
+Open http://127.0.0.1:3000. With DEMO_MODE=true, development sandbox buttons enter fictional role accounts without embedding account passwords in the client. Existing user, subject and assignment records are retained. The legacy `data/database.json` is imported only when no relational database exists; the original file is left untouched. Subsequent writes go to `school.sqlite`, not the old JSON file. Stop the old server before upgrading and make a private backup first. Automatic curriculum upgrades keep a private pre-upgrade course snapshot in database settings.
 
 ## Production bootstrap
 

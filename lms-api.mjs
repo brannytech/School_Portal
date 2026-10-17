@@ -61,8 +61,20 @@ export async function lmsApi(x){
   needAdmin();const p={...db.policy,...b.policy};if(!(0<=p.developing&&p.developing<p.proficient&&p.proficient<p.mastered&&p.mastered<=100)||p.completion<1||p.completion>100||p.noteMaximum<1||p.noteMaximum>100)fail(400,'Check the mastery thresholds and maximum marks.');p.weights??={test:40,exam:60,notes:0};const weights=Object.values(p.weights);if(weights.length!==3||weights.some(v=>!Number.isFinite(v)||v<0)||weights.reduce((a,b)=>a+b,0)!==100||(!p.noteIncludedInCA&&p.weights.notes>0)||(p.noteIncludedInCA&&p.weights.notes===0))fail(400,'Test, exam and note weights must total 100%. Notes need a positive weight only when explicitly included.');db.policy={...defaultPolicy,...p};audit(u,'Updated mastery and assessment policy');await save();json(db.policy);return true;
  }
  if(endpoint==='account-recovery'&&method==='POST'){
-  needAdmin();const person=db.users.find(v=>v.id===b.id);if(!person)fail(404,'Account not found.');const token=randomBytes(32).toString('hex');db.resetTokens=db.resetTokens.filter(v=>v.user!==person.id);db.resetTokens.push({id:tokenHash(token),user:person.id,expires:new Date(Date.now()+30*60000).toISOString(),used:false});audit(u,`Issued one-time account recovery for ${person.id}`);await sessions.revoke(person.id);await save();json({token,expiresInMinutes:30,message:'Deliver this one-time token privately to the account holder. It is never logged.'});return true;
+  needAdmin();const person=db.users.find(v=>v.id===b.id);if(!person)fail(404,'Account not found.');const token=randomBytes(32).toString('hex');db.resetTokens=db.resetTokens.filter(v=>v.user!==person.id);db.resetTokens.push({id:tokenHash(token),user:person.id,expires:new Date(Date.now()+30*60000).toISOString(),used:false});audit(u,`Issued one-time account recovery for ${person.id}`);for(const r of db.recoveryRequests||[])if(r.user===person.id&&r.status==='PENDING'){r.status='ISSUED';r.handledBy=u.id;r.handled=new Date().toISOString();}await sessions.revoke(person.id);await save();json({token,expiresInMinutes:30,message:'Deliver this one-time token privately to the account holder. It is never logged.'});return true;
  }
  return false;
+}
+export async function requestRecovery(b){
+ const generic={message:'If that email belongs to an account, your school administrator has been notified. They will give you a one-time recovery token in person or through the school’s private channel.'};
+ const email=clean(b.email).toLowerCase();const person=email&&db.users.find(v=>v.email.toLowerCase()===email&&!['ARCHIVED','DEACTIVATED'].includes(v.status));
+ if(!person)return generic;
+ db.recoveryRequests??=[];
+ if(!db.recoveryRequests.some(r=>r.user===person.id&&r.status==='PENDING')){
+  db.recoveryRequests.push({id:randomBytes(8).toString('hex'),user:person.id,name:person.name,role:person.role,class:person.class||'',email:person.email,status:'PENDING',requested:new Date().toISOString()});
+  for(const admin of db.users.filter(v=>v.role==='ADMIN'&&v.status==='ACTIVE'))notify(admin.id,'Password recovery requested',person.name+' asked for help signing in. Open Admin to issue a one-time recovery token.','admin');
+  await save();
+ }
+ return generic;
 }
 export async function redeemRecovery(b,fail){const token=db.resetTokens.find(v=>v.id===tokenHash(clean(b.token)));if(!token||token.used||Date.parse(token.expires)<Date.now())fail(400,'This recovery token is invalid or expired.');if(String(b.password||'').length<14)fail(400,'Use a password of at least 14 characters.');const person=db.users.find(u=>u.id===token.user);person.password=hash(b.password);token.used=true;await save();return {message:'Password set. Sign in with your new password. Account approval is still required.'};}

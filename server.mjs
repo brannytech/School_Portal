@@ -7,12 +7,12 @@ import {weeks} from './content.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {durableSessions} from './database.mjs';
-import {lmsApi,releaseState,notify,redeemRecovery} from './lms-api.mjs';
+import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
 import {checkAnswer,gradeAssessment,masteryBand,calculate} from './dist/domain.js';
 import {summariseResults} from './dist/results.js';
 const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
 const sessions=durableSessions(sql),rates=new Map(),uploadTokens=new Map(),secret=db.appSecret;
-const demo=process.env.NODE_ENV!=='production'&&process.env.DEMO_MODE!=='false';
+const demo=process.env.NODE_ENV!=='production'&&process.env.DEMO_MODE==='true';
 const scopeKey=(c,s,t,sid=academicSession()||db.currentSessionId)=>academicKey(c,s,t,sid);
 const classFor=(u,sid=academicSession()||db.currentSessionId)=>db.enrolments.find(e=>e.student===u.id&&e.sessionId===sid)?.class;
 const currentTerm=()=>db.sessions.find(s=>s.id===(academicSession()||db.currentSessionId))?.currentTerm||1;
@@ -64,6 +64,7 @@ async function handle(req,res){
   rate('register:'+req.socket.remoteAddress,8);const email=text(b.email,160).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Enter a valid email.');if(db.users.some(v=>v.email===email))fail(409,'This email is already registered.');if(!db.classes.includes(b.class))fail(400,'Choose a valid class.');if(String(b.password||'').length<10)fail(400,'Use at least 10 characters for your password.');
   const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING'});await save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
  }
+ if(endpoint==='request-recovery'&&method==='POST'){rate('request-recovery:'+req.socket.remoteAddress,6);json(await requestRecovery(b));return;}
  if(endpoint==='recover-account'&&method==='POST'){rate('recover:'+req.socket.remoteAddress,8);json(await redeemRecovery(b,fail));return;}
  if(!u)fail(401,'Please sign in to continue.');
  const chosen=text(b.sessionId||url.searchParams.get('sessionId')||db.currentSessionId);if(!db.sessions.some(s=>s.id===chosen))fail(400,'Unknown academic session.');requestScope.getStore().sessionId=chosen;
@@ -79,7 +80,7 @@ async function handle(req,res){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
   const fits=v=>v.class===c&&v.subject===s&&v.term===t&&belongs(v);
   const mine=v=>u.role!=='STUDENT'||v.student===u.id;
-  json({user:safeUser(u),currentTerm:currentTerm(),sessionId:academicSession(),currentSessionId:db.currentSessionId,sessions:db.sessions.filter(v=>u.role!=='STUDENT'||db.enrolments.some(e=>e.student===u.id&&e.sessionId===v.id)),policy:db.policy,resultSummary:u.role==='STUDENT'?summariseResults(db.scores.filter(v=>fits(v)&&v.student===u.id),db.submissions.filter(v=>fits(v)&&v.student===u.id&&v.kind==='note'),db.policy):null,school:db.school,classes:db.classes,subjects:db.subjects,allocations:db.allocations.filter(a=>belongs(a)&&(u.role==='ADMIN'||a.teacher===u.id)),termLocked:locked,
+  json({user:safeUser(u),currentTerm:currentTerm(),sessionId:academicSession(),currentSessionId:db.currentSessionId,sessions:db.sessions.filter(v=>u.role!=='STUDENT'||db.enrolments.some(e=>e.student===u.id&&e.sessionId===v.id)),policy:db.policy,recoveryRequests:u.role==='ADMIN'?(db.recoveryRequests||[]).filter(r=>r.status==='PENDING'):[],resultSummary:u.role==='STUDENT'?summariseResults(db.scores.filter(v=>fits(v)&&v.student===u.id),db.submissions.filter(v=>fits(v)&&v.student===u.id&&v.kind==='note'),db.policy):null,school:db.school,classes:db.classes,subjects:db.subjects,allocations:db.allocations.filter(a=>belongs(a)&&(u.role==='ADMIN'||a.teacher===u.id)),termLocked:locked,
    weeks:locked?[]:(course(c,s,t).map(({lessons,quiz,...w})=>({id:w.id,title:w.title,subtitle:w.subtitle,unlocked:(db.unlocks[scopeKey(c,s,t)]||[]).includes(w.id),lessons:lessons.filter(l=>u.role!=='STUDENT'||releaseState(c,s,t,l.id,scopeKey).status!=='DRAFT').map(({id,title,minutes,day})=>({id,title,minutes,day,...releaseState(c,s,t,id,scopeKey)}))}))),
    assignments:locked?[]:db.assignments.filter(fits),submissions:locked?[]:db.submissions.filter(v=>fits(v)&&mine(v)),progress:locked?[]:db.progress.filter(v=>fits(v)&&mine(v)),reflections:locked?[]:db.reflections.filter(v=>fits(v)&&mine(v)&&(u.role==='STUDENT'||!v.draft)),scores:locked?[]:db.scores.filter(v=>fits(v)&&mine(v)&&(u.role!=='STUDENT'||v.published!==false)),
    questions:locked?[]:db.questions.filter(v=>fits(v)&&(u.role!=='STUDENT'||!v.hidden&&releaseState(c,s,t,v.lesson,scopeKey).available)).map(q=>u.role==='STUDENT'?((({reports,...v})=>v)(q)):q),resources:locked?[]:db.resources.filter(fits),announcements:locked?[]:db.announcements.filter(fits),notifications:db.notifications.filter(n=>n.recipient===u.id).slice(-30).reverse(),assessments:locked?[]:db.assessmentAttempts.filter(v=>fits(v)&&mine(v)).map(({questions,answers,...v})=>v),practiceAttempts:locked?[]:db.practiceAttempts.filter(v=>fits(v)&&mine(v)),

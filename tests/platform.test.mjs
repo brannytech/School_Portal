@@ -6,7 +6,7 @@ import path from 'node:path';
 import {curriculum as weeks} from '../curriculum.mjs';
 const dir=path.resolve('test-results','api-'+Date.now());fs.mkdirSync(dir,{recursive:true});
 const port=0;let root='';
-const processServer=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,DEMO_PASSWORD:'Learn@2026!',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
+const processServer=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,DEMO_PASSWORD:'Learn@2026!',NODE_ENV:'test',SELF_REGISTRATION:'true'},stdio:['ignore','pipe','pipe']});
 let serverOutput='';processServer.stdout.on('data',b=>{serverOutput+=b;const match=serverOutput.match(/ready at (http:\/\/127\.0\.0\.1:\d+)/);if(match)root=match[1];});processServer.stderr.on('data',b=>serverOutput+=b);
 
 async function request(route,data,session={},method){const r=await fetch(root+'/api/'+route,{method:method||(data?'POST':'GET'),headers:{'Content-Type':'application/json',Cookie:session.cookie||'','X-CSRF-Token':session.csrf||''},...(data?{body:JSON.stringify(data)}:{})});const json=await r.json();return {status:r.status,value:json,cookie:r.headers.get('set-cookie')?.split(';')[0]};}

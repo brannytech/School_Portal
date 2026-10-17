@@ -34,7 +34,7 @@ db.currentSessionId??=db.sessions[0].id;
 db.policy??={developing:50,proficient:70,mastered:85,completion:60,noteMaximum:10,noteIncludedInCA:false};
 db.appSecret??=process.env.SESSION_SECRET||randomBytes(32).toString('hex');
 db.enrolments??=db.users.filter(u=>u.role==='STUDENT').map(u=>({id:u.id+'|'+db.currentSessionId,student:u.id,class:u.class,sessionId:db.currentSessionId}));
-for(const key of [...Object.keys(entityTables),'versions','markingHistory','notifications','resetTokens','audit'])db[key]??=[];
+for(const key of [...Object.keys(entityTables),'versions','markingHistory','notifications','resetTokens','audit','recoveryRequests'])db[key]??=[];
 for(const a of db.allocations){a.id??=randomBytes(16).toString('hex');a.sessionId??=db.currentSessionId;}
 db.courses??={};
 for(const key of Object.keys(db.courses))if(!key.includes('|')){db.courses[db.currentSessionId+'|'+key]=db.courses[key];delete db.courses[key];}

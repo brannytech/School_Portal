@@ -145,4 +145,5 @@ async function handle(req,res){
 }
 let requestTail=Promise.resolve();
 const server=http.createServer((req,res)=>{requestTail=requestTail.then(()=>requestScope.run({sessionId:db.currentSessionId},()=>handle(req,res))).catch(e=>{console.error('Request failed:',e.message);if(!res.headersSent)res.writeHead(500);res.end();});});
+server.on('error',e=>{if(e.code==='EADDRINUSE'){console.error(`Port ${port} is already in use (another copy of this app or another program).\nChoose another port: set PORT=3001 in your .env or .env.production file, or stop the program using port ${port}.`);process.exit(1);}throw e;});
 server.listen(port,host,()=>console.log(`Olawale's Lab is ready at http://${host}:${server.address().port}`));

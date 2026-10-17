@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
     "backup": "node --env-file-if-exists=.env --experimental-sqlite scripts/backup.mjs",
-    "restore": "node --env-file-if-exists=.env --experimental-sqlite scripts/restore.mjs"
+    "restore": "node --env-file-if-exists=.env --experimental-sqlite scripts/restore.mjs",
+    "setup:production": "node scripts/setup-production.mjs",
+    "start:production": "node --env-file=.env.production --experimental-sqlite server.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",

@@ -29,6 +29,19 @@ Configure these server environment variables, or place them in a private `.env` 
 
 Run `npm ci`, `npm run build`, then `npm start`. First production bootstrap seeds curriculum and school structure, but no fictional students, teachers, marks or assignments. Access recovery uses a short-lived single-use token created by an authenticated school administrator and delivered privately to its account holder. The application does not send invitation or recovery emails.
 
+## Quick start for a real school (one command)
+
+```powershell
+npm ci
+npm run setup:production -- --email head@yourschool.example
+npm run build
+npm run start:production
+```
+
+The setup command writes a private `.env.production` (ignored by git) with a generated session secret and a generated administrator password, which it prints once. It refuses to reuse a data folder that already has records, and it never starts with demonstration users. After your first sign-in, delete the `ADMIN_PASSWORD` line from `.env.production`. Add `--insecure-http` only if you must serve the app over plain HTTP on a private network; use HTTPS in front of it for anything public.
+
+Then, as administrator: create or approve the teachers and students, assign teachers to classes and subjects, and release the lessons. Students who forget their password use “Forgot your password?” on the sign-in page.
+
 ## PostgreSQL
 
 Set `DATABASE_URL` to a genuine PostgreSQL connection string and `DATABASE_SSL=true` where the host requires verified TLS. The `pg` adapter uses bound parameters and the versioned SQL files in `migrations/`. Migrations run transactionally at startup. Use a restricted database account and take a backup before schema changes.

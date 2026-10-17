@@ -15,6 +15,10 @@ npm start
 
 Open http://127.0.0.1:3000. The sign-in page shows no development sandbox unless you set DEMO_MODE=true in .env on a private machine (then, with a fresh DATA_DIR, set DEMO_PASSWORD and sign in as admin@olawaleslab.school). Production is a separate bootstrap with no demonstration users. See [installation and deployment](DEPLOYMENT.md).
 
+## Real school use
+
+See **Quick start for a real school** in [DEPLOYMENT.md](DEPLOYMENT.md): `npm run setup:production -- --email you@school.example`, then `npm run build` and `npm run start:production`.
+
 ## This upgrade
 
 - Replaces JSON persistence with a real relational database and versioned migrations. SQLite runs locally; PostgreSQL is configurable for deployment. Existing local records are imported once and the original JSON file is retained.

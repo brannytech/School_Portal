@@ -4,7 +4,8 @@ import path from 'node:path';
 import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
 import {db,save,hash,matches,dataDir,sql} from './store.mjs';
 import {weeks} from './content.mjs';
-import {profileApi,registrationPhoto} from './profile-api.mjs';
+import {profileApi} from './profile-api.mjs';
+import {studentApi} from './student-api.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {durableSessions} from './database.mjs';
@@ -77,6 +78,7 @@ async function handle(req,res){
  if(await profileApi({endpoint,method,url,req,res,u,body,json,fail,audit,rate}))return;
  const c=u.role==='STUDENT'?u.class:text(b.class||url.searchParams.get('class')||'SS1');const s=text(b.subject||url.searchParams.get('subject')||'Mathematics');const t=Number(b.term||url.searchParams.get('term')||1);
  if(![1,2,3].includes(t))fail(400,'Choose a valid term.');
+ if(await studentApi({endpoint,method,b,url,u,c,json,fail,audit,sessions}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
  if(endpoint==='state'&&method==='GET'){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
@@ -138,8 +140,6 @@ async function handle(req,res){
  if(endpoint==='reflection-reply'&&method==='POST'){const r=db.reflections.find(v=>v.id===b.id);if(!r)fail(404,'Reflection not found.');scope(u,r.class,r.subject);r.reply=needed(text(b.text),'Feedback');await save();json(r);return;}
  if(u.role!=='ADMIN')fail(403,'Admin access required.');
  if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);db.sessions.find(v=>v.id===academicSession()).currentTerm=db.currentTerm;audit(u,`Current term set to ${db.currentTerm}`);await save();json({ok:true});return;}
- if(endpoint==='student-status'&&method==='POST'){const student=db.users.find(v=>v.id===b.id&&v.role==='STUDENT');if(!student||!['ACTIVE','REJECTED','REMOVED','PENDING','SUSPENDED','DEACTIVATED'].includes(b.status))fail(400,'Invalid student or status.');if(b.status==='ACTIVE'&&student.photoRequired&&!student.photoId)fail(400,'Upload the student’s initial profile photo before approval.');student.status=b.status;if(b.status!=='ACTIVE')await sessions.revoke(student.id);student.reason=text(b.reason);if(b.newClass){if(!db.classes.includes(b.newClass))fail(400,'Invalid class.');student.class=b.newClass;const enrolment=db.enrolments.find(v=>v.student===student.id&&belongs(v));if(enrolment)enrolment.class=b.newClass;}audit(u,`${student.name}: ${b.status}${b.newClass?' → '+b.newClass:''}`);await save();json({ok:true});return;}
- if(endpoint==='add-user'&&method==='POST'){const email=needed(text(b.email,160).toLowerCase(),'Email');if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Enter a valid email.');if(!db.classes.includes(c))fail(400,'Choose a valid class.');if(db.users.some(v=>v.email===email))fail(409,'Email already exists.');if(String(b.password||'').length<10)fail(400,'Use a password of at least 10 characters.');const photo=registrationPhoto(u,b,fail);const user={id:randomUUID(),photoRequired:b.role!=='TEACHER',photoId:photo?.id,name:needed(text(b.name,100),'Name'),email,password:hash(b.password),role:b.role==='TEACHER'?'TEACHER':'STUDENT',status:b.role==='TEACHER'?'ACTIVE':'PENDING',class:c,admission:text(b.admission,80)};if(photo)photo.owner=user.id;db.users.push(user);audit(u,`Added ${user.role}: ${user.name}`);await save();json(safeUser(user),201);return;}
  if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(belongs(v)&&v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({id:randomUUID(),teacher:b.teacher,class:c,subject:s,sessionId:academicSession()});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);await save();json({ok:true});return;}
  if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);await save();json({ok:true});return;}
  fail(404,'Endpoint not found.');

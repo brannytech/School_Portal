@@ -1,7 +1,7 @@
 'use strict';
 
 function profileAvatar(account,large=false) {
- return `<span class="avatar${large?' avatar-large':''}">${account.photoId?`<img src="/api/profile-photo/${encodeURIComponent(account.id)}?v=${encodeURIComponent(account.photoId)}" alt="${esc(account.name)}’s profile photo">`:esc(initials(account.name))}</span>`;
+ return `<span class="avatar${large?' avatar-large':''}">${account.photoId&&(account.id===user?.id||user?.role==='ADMIN'||canRegisterRoster()||canManageRoster())?`<img src="/api/profile-photo/${encodeURIComponent(account.id)}?sessionId=${encodeURIComponent(academicId)}&v=${encodeURIComponent(account.photoId)}" alt="${esc(account.name)}’s profile photo">`:esc(initials(account.name))}</span>`;
 }
 function profileButton(account,sidebar=false) {
  return `<button class="account-button${sidebar?' account-summary':''}" data-action="account-open" aria-label="Open profile and sign out" aria-haspopup="dialog">${profileAvatar(account)}${sidebar?`<span><strong>${esc(account.name)}</strong><small>View profile · Sign out</small></span>`:'<span class="account-label">Profile</span>'}</button>`;
@@ -21,13 +21,15 @@ render=function() {
 function registrationPhotoFields() {
  return `<div class="field profile-photo-field"><label for="registration-photo">Initial profile photo <span class="muted">(required for students)</span></label><input id="registration-photo" name="profilePhoto" type="file" accept="image/jpeg,image/png" required aria-describedby="registration-photo-help"><p id="registration-photo-help" class="small muted">Upload the student’s photo. They can update it later from Profile. JPEG or PNG, up to 10 MB before compression.</p><div class="profile-photo-preview"></div></div>`;
 }
+let displayedAccount=null;
 function openAccount(account=user) {
+ displayedAccount=account;
  const own=account.id===user.id;
  const photoHelp=own?'Choose a clear photo of yourself.':'Upload a clear photo of this student.';
- const canUpdate=user.role==='ADMIN'||account.role!=='STUDENT'||!!account.photoId;
+ const canUpdate=own?(account.role!=='STUDENT'||!!account.photoId):canManageRoster()||canRegisterRoster()&&!account.photoId;
  modal(own?'Your profile':`${account.name} · Student profile`,
   `<section class="account-details">${profileAvatar(account,true)}<h3>${esc(account.name)}</h3><p class="muted small">${esc(account.email)}</p><div class="row account-badges"><span class="badge">${esc(account.role==='STUDENT'?account.class:account.role==='ADMIN'?'Administrator':'Teacher')}</span>${account.admission?`<span class="badge gray">${esc(account.admission)}</span>`:''}<span class="badge gray">${esc(account.status)}</span></div></section>
-  ${canUpdate?`<form data-form="account-photo" data-id="${esc(account.id)}" class="gap"><div class="field"><label for="profile-photo">${account.photoId?'Update profile photo':'Upload initial profile photo'}</label><input id="profile-photo" name="profilePhoto" type="file" accept="image/jpeg,image/png" required aria-describedby="profile-photo-help"><p id="profile-photo-help" class="small muted">${photoHelp} JPEG or PNG, up to 10 MB before compression.</p><div class="profile-photo-preview"></div></div><p class="error" role="alert" id="profile-photo-error"></p><button class="primary" type="submit">Save photo</button></form>`:'<p class="callout small">Your administrator needs to upload your initial photo. Once added, you can update it here.</p>'}
+  ${canUpdate?`<form data-form="account-photo" data-id="${esc(account.id)}" class="gap"><div class="field"><label for="profile-photo">${account.photoId?'Update profile photo':'Upload initial profile photo'}</label><input id="profile-photo" name="profilePhoto" type="file" accept="image/jpeg,image/png" required aria-describedby="profile-photo-help"><p id="profile-photo-help" class="small muted">${photoHelp} JPEG or PNG, up to 10 MB before compression.</p><div class="profile-photo-preview"></div></div><p class="error" role="alert" id="profile-photo-error"></p><button class="primary" type="submit">Save photo</button></form>`:`<p class="callout small">${own?'Your administrator needs to upload your initial photo. Once added, you can update it here.':'You have read-only access to this profile. Ask your administrator for student-management privileges to make changes.'}</p>`}
   ${own?`<hr class="divider"><button class="danger account-logout" data-action="account-logout">${icon('logout')} Sign out of Olawale’s Lab</button>`:''}`);
 }
 
@@ -73,9 +75,8 @@ document.addEventListener('submit',async event=>{
  const button=form.querySelector('[type="submit"]');if(button.disabled)return;
  button.disabled=true;button.textContent='Saving photo…';
  const errorBox=form.querySelector('[role="alert"]');errorBox.textContent='';
- try {await uploadProfilePhoto(new FormData(form).get('profilePhoto'),{student:form.dataset.id});const id=form.dataset.id;const preview=form.querySelector('.profile-photo-preview');if(preview?.dataset.url)URL.revokeObjectURL(preview.dataset.url);await refresh();render();openAccount(id===user.id?user:state.students.find(s=>s.id===id));toast('Profile photo updated.');}
+ try {const previous=displayedAccount;const saved=await uploadProfilePhoto(new FormData(form).get('profilePhoto'),{student:form.dataset.id});const id=form.dataset.id;const preview=form.querySelector('.profile-photo-preview');if(preview?.dataset.url)URL.revokeObjectURL(preview.dataset.url);await refresh();render();openAccount(id===user.id?user:{...previous,photoId:saved.id});toast('Profile photo updated.');}
  catch(error){errorBox.textContent=error.message;button.disabled=false;button.textContent='Save photo';}
 },true);
 const closeProfileModal=closeModal;
 closeModal=function(){document.querySelectorAll('.profile-photo-preview[data-url]').forEach(p=>URL.revokeObjectURL(p.dataset.url));closeProfileModal();};
-boot();

@@ -45,3 +45,11 @@ Select the photo/initials at the top right (or the profile summary in the deskto
 Administrators must select an **Initial profile photo** when adding an individual student. Student accounts remain pending until approved. For CSV imports and self-registered students, open **School management → Your students → Profile**, upload the initial photo, then approve the account. Existing accounts without photos retain their access and display initials until an admin supplies the initial photo. Students can subsequently update their own photo from Profile.
 
 The light/dark theme button is beside Profile. Both themes use Grace-Field College’s blue and crimson with readable text on neutral backgrounds.
+
+## Teacher privileges and student directory
+
+Administrators: open **School management → Teachers & subjects → Set teacher privileges**. Select a teacher and grant **Register students**, **Manage student access**, or both. Teachers can never grant privileges or create staff accounts. Revoking a permission applies to the next request, including already signed-in teachers.
+
+All teachers can view registered students in their assigned classes under **Students** (desktop sidebar, Teaching workspace, or **More → Students** on phones). Administrators can view all students. Search by name, school email or admission number; combine class and status filters; choose 10, 20 or 50 students per page, use Previous/Next, or jump to a page. Phone lists use cards to keep actions within reach.
+
+With registration permission, a teacher can register students in their assigned classes in the current session and upload initial photos. New accounts remain pending. With management permission, a teacher can approve, reject, suspend, deactivate or remove students, update their photos, and move them between the teacher’s assigned classes. Initial photos are still required before approval. Account removal preserves academic history. Administrators control teacher assignments and privileges separately.

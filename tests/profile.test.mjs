@@ -26,7 +26,7 @@ test('Profile photos: initial registration, ownership, validation, persistence a
   const staged=await upload(admin,'?newStudent=true');assert.equal(staged.status,201);const photo=(await staged.json()).id;
   assert.equal((await fetch(root+'/api/profile-photo/'+photo,{headers:{Cookie:peer.cookie}})).status,404);
   const created=await req('add-user',{...account,photoId:photo},admin);assert.equal(created.status,201);assert.equal(created.value.status,'PENDING');const id=created.value.id;
-  assert.equal((await req('add-user',{...account,email:'reuse@test.school',photoId:photo},admin)).status,400);
+  assert.equal((await req('add-user',{...account,email:'reuse@test.school',admission:'P-002',photoId:photo},admin)).status,400);
   assert.equal((await req('login',{email:account.email,password:account.password})).status,403);
   assert.equal((await req('student-status',{id,status:'ACTIVE'},admin)).status,200);const learner=await login(account.email);
   assert.equal((await fetch(root+'/api/profile-photo/'+id)).status,401);
@@ -36,7 +36,7 @@ test('Profile photos: initial registration, ownership, validation, persistence a
   assert.equal((await upload(peer,'?student='+id)).status,403);
   const updated=await upload(learner);assert.equal(updated.status,201);const replacement=(await updated.json()).id;assert.notEqual(replacement,photo);
   assert.equal((await req('me',null,learner)).value.user.photoId,replacement);
-  const imported=await req('add-user',{...account,email:'import@test.school',import:true},admin);assert.equal(imported.status,201);assert.equal((await req('student-status',{id:imported.value.id,status:'ACTIVE'},admin)).status,400);
+  const imported=await req('add-user',{...account,email:'import@test.school',admission:'P-003',import:true},admin);assert.equal(imported.status,201);assert.equal((await req('student-status',{id:imported.value.id,status:'ACTIVE'},admin)).status,400);
   await stop();await start();assert.equal((await req('me',null,learner)).value.user.photoId,replacement);assert.equal((await fetch(root+'/api/profile-photo/'+id,{headers:{Cookie:learner.cookie}})).status,200);
   assert.equal((await req('logout',{},learner)).status,200);assert.equal((await fetch(root+'/api/profile-photo/'+id,{headers:{Cookie:learner.cookie}})).status,401);
  }finally{await stop();}

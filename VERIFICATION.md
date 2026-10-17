@@ -23,3 +23,11 @@ Browser inspection complements the executed API tests; it is not represented as 
 ## Unverified deployment boundaries
 
 No live PostgreSQL service or S3 credentials were available, so provider migration/upload/playback and hosted HTTPS gates were not executed. Actual Android/iOS capture, PWA installation, complete upload-rotation/order workflows, captions, malware scanning and school operational retention/accessibility review remain outside this verification. See IMPLEMENTATION_STATUS.md and DEPLOYMENT.md.
+
+## Delegated student management
+
+- `npm test`: 35 tests pass, including strict TypeScript/build syntax checks.
+- New directory fixture has 125 added learners plus existing students: checked 50-item pages, final-page size, no duplicates between pages, case-insensitive name/email/admission search, class/status filters and empty results.
+- Verified that only admins can grant privileges; teachers cannot create staff, cross assigned-class boundaries or move students to unassigned classes.
+- Registration requires an initial photo and remains pending until an authorised person approves it. Privilege persistence, immediate revocation and loss of a class assignment are covered.
+- Browser checks: admin privilege form, teacher registration fields restricted to STUDENT/assigned classes, searchable directory, combined filters, clear-filter empty state, phone card layout and light/dark contrast.

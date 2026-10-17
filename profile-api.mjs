@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {db, save, dataDir} from './store.mjs';
 import {cleanImage} from './images.mjs';
+import {canViewStudent,canEditStudentPhoto,hasStudentPrivilege,assignedClasses} from './student-access.mjs';
 import {storeFile, streamFile} from './storage.mjs';
 
 // Account photos follow the account across academic sessions. Metadata is persisted
@@ -8,7 +9,7 @@ import {storeFile, streamFile} from './storage.mjs';
 export async function profileApi({endpoint, method, url, req, res, u, body, json, fail, audit, rate}) {
  if(endpoint.startsWith('profile-photo/') && method==='GET') {
   const target=db.users.find(v=>v.id===endpoint.slice('profile-photo/'.length));
-  if(!target || (target.id!==u.id && u.role!=='ADMIN')) fail(404,'Profile photo not found.');
+  if(!target || (target.id!==u.id && u.role!=='ADMIN' && !(canViewStudent(u,target)&&(hasStudentPrivilege(u,'registerStudents')||hasStudentPrivilege(u,'manageStudents'))))) fail(404,'Profile photo not found.');
   const photo=(db.profilePhotos||[]).find(p=>p.id===target.photoId && p.owner===target.id);
   if(!photo) fail(404,'Profile photo not found.');
   await streamFile(dataDir,photo,req,res);
@@ -18,8 +19,8 @@ export async function profileApi({endpoint, method, url, req, res, u, body, json
  rate('profile-photo:'+u.id,30);
  const staged=url.searchParams.get('newStudent')==='true';
  const target=staged?null:db.users.find(v=>v.id===(url.searchParams.get('student')||u.id));
- if(staged && u.role!=='ADMIN') fail(403,'Only an administrator can register a student photo.');
- if(!staged && (!target || (target.id!==u.id && u.role!=='ADMIN'))) fail(403,'You can only update your own profile photo.');
+ if(staged && (!hasStudentPrivilege(u,'registerStudents')||!assignedClasses(u).length)) fail(403,'Student-registration privilege and an assigned class are required.');
+ if(!staged && (!target || (target.id!==u.id && u.role!=='ADMIN' && !canEditStudentPhoto(u,target)))) fail(403,'You can only update your own profile photo.');
  if(!staged && u.role==='STUDENT' && !target.photoId) fail(403,'Ask your administrator to add your initial profile photo first.');
  const cleaned=cleanImage(await body(req,700*1024));
  const photo={id:randomUUID(),owner:target?.id||null,uploader:u.id,type:cleaned.type,size:cleaned.bytes.length,created:new Date().toISOString()};

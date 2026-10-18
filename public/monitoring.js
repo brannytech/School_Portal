@@ -1,5 +1,5 @@
 'use strict';
-const monitoringLabels={content:'Lessons marked read',exercises:'Exercises attempted',quizzes:'Lesson quizzes submitted',mastery:'Topic tests submitted',reflections:'Reflections submitted',assignments:'Assignments submitted'};
+const monitoringLabels={content:'Lessons marked read',exercises:'Exercises attempted',quizzes:'Weekly quizzes submitted',reflections:'Weekly reflections submitted',assignments:'Assignments submitted'};
 const monitorFilters={week:'latest',compareWeek:'previous',sort:'completion',search:'',page:1,pageSize:10};
 let monitorContext='',monitorRequest=0,monitorData=null,monitorTimer;
 function monitorWeekOptions(weeks){return `<option value="latest" ${monitorFilters.week==='latest'?'selected':''}>Latest released week</option><option value="all" ${monitorFilters.week==='all'?'selected':''}>All released weeks</option>`+weeks.map(w=>`<option value="${w.id}" ${String(w.id)===String(monitorFilters.week)?'selected':''}>Week ${w.id} · ${esc(w.title)}</option>`).join('');}

@@ -55,3 +55,11 @@ No live PostgreSQL service or S3 credentials were available, so provider migrati
 
 ### Notes removed from progress
 Full build and regression suite: 51 tests passed. Confirmed notes and unlinked-note reminders are absent from monitoring responses and student weekly displays; notebook submission, linking and correction workflows still persist. Tests assert weekly completion percentage and denominator remain unchanged after note uploads and resubmissions. Browser checked the mobile student learning path and progress detail without note metrics.
+
+### Weekly content structure, lesson builder and assignment releases
+- Full build and integration suite: 57 tests passed. New tests verify draft privacy, single-week replacement, YouTube validation, hidden answer keys, one weekly quiz/reflection, release enforcement, multiple assignments, WAT deadlines, revision conflicts, stable subtopic IDs and ordering/history after restart.
+- npm run verify-math passed: 392 example/assessment checks, 368 source questions, 2,600 curriculum instances, 900 log-table cells and 1,000 antilog-table cells. No shipped mathematical answers changed.
+- Browser checked a 326px mobile learning path with bold subtopic names and no Day labels; subtopic navigation reaches the final lesson, whose practice precedes the weekly quiz and reflection. Teacher template loaded 5 existing subtopics, 250 practice questions, 20 weekly quiz questions and YouTube fields; Save private draft succeeded without altering published content.
+- Optional notebook submission remains excluded from progress.
+
+- Final browser preview verified the direct Weekly quiz & reflection button reaches the closing sections in the order practice → quiz → reflection. Mobile viewport 326px, document width 311px (no horizontal overflow). Assignment editor exposes learning week, work date, WAT deadline, release status, scheduled release and resubmission. Previews saved under preview/weekly-lesson-template.png and preview/weekly-quiz-reflection.png.

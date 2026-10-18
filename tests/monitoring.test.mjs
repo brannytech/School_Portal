@@ -23,24 +23,24 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('monitoring?student=outside',null,teacher)).status,404);
    assert.equal((await req('monitoring?class=SS2',null,admin)).value.total,1);
   });
-  await t.test('Weekly work is 12/45; retakes and unknown questions cannot inflate completion',async()=>{
+  await t.test('Weekly work is 11/44; retakes and unknown questions cannot inflate completion',async()=>{
    const r=await req('monitoring?student=student',null,teacher);assert.equal(r.status,200);const v=r.value.detail;
-   assert.equal(v.weeks[0].done,12);assert.equal(v.weeks[0].total,45);assert.equal(v.weeks[0].percent,26.67);assert.equal(v.done,12);assert.equal(v.total,45);
-   assert.deepEqual(v.categories.exercises,{done:7,total:39,percent:17.95});assert.equal(v.categories.quizzes.done,1);assert.equal(v.categories.mastery.done,1);assert.equal(v.categories.assignments.done,1);
-   assert.equal(v.exerciseAttempts,8);assert.equal(v.quizAttempts,2);assert.equal(v.practiceAccuracy,100);assert(!('notes' in v));assert(!('notes' in v.weeks[0]));assert.equal(v.generalAssignments,0);assert.equal(r.value.unlinkedAssignments,1);assert.equal(v.categories.content.done,1);
+   assert.equal(v.weeks[0].done,11);assert.equal(v.weeks[0].total,44);assert.equal(v.weeks[0].percent,25);assert.equal(v.done,11);assert.equal(v.total,44);
+   assert.deepEqual(v.categories.exercises,{done:7,total:39,percent:17.95});assert.equal(v.categories.quizzes.done,1);assert(!('mastery' in v.categories));assert.equal(v.categories.assignments.done,1);
+   assert.equal(v.exerciseAttempts,8);assert.equal(v.quizAttempts,3);assert.equal(v.practiceAccuracy,100);assert(!('notes' in v));assert(!('notes' in v.weeks[0]));assert.equal(v.generalAssignments,0);assert.equal(r.value.unlinkedAssignments,1);assert.equal(v.categories.content.done,1);
    assert.equal(v.weeks.length,1,'Unreleased draft weeks must not appear in progress');assert.deepEqual(r.value.weekOptions.map(w=>w.id),[1]);
    assert.equal(r.value.students.find(s=>s.id==='student2').done,0);
    assert(!JSON.stringify(r.value).includes('removed-question'));assert(!('answers' in v));
   });
   await t.test('Personal weekly progress matches staff calculations and never exposes classmates',async()=>{
    const result=await req('my-progress?student=student2&class=SS2',null,student);assert.equal(result.status,200);const v=result.value;
-   assert.equal(v.detail.id,'student');assert.equal(v.detail.done,12);assert.equal(v.detail.total,45);assert(!('unlinkedNotes' in v));assert(!('students' in v));assert(!JSON.stringify(v).includes('student2'));assert(!('answers' in v.detail));
+   assert.equal(v.detail.id,'student');assert.equal(v.detail.done,11);assert.equal(v.detail.total,44);assert(!('unlinkedNotes' in v));assert(!('students' in v));assert(!JSON.stringify(v).includes('student2'));assert(!('answers' in v.detail));
    assert.equal((await req('my-progress',null,teacher)).status,403);
    assert.equal((await req('my-progress?term=2',null,student)).status,403);
    await req('term-lock',{locked:true},admin);assert.equal((await req('my-progress',null,student)).status,403);await req('term-lock',{locked:false},admin);
   });
   await t.test('Week and search filters use real denominators and validate pagination',async()=>{
-   const week=(await req('monitoring?week=1&student=student',null,teacher)).value.detail;assert.equal(week.done,12);assert.equal(week.total,45);assert.equal(week.generalAssignments,0);
+   const week=(await req('monitoring?week=1&student=student',null,teacher)).value.detail;assert.equal(week.done,11);assert.equal(week.total,44);assert.equal(week.generalAssignments,0);
    assert.equal((await req('monitoring?search=GF%2F2026%2F001',null,teacher)).value.total,1);
    assert.equal((await req('monitoring?week=2&student=student',null,teacher)).status,400);
    for(const query of ['week=999','week=bad','page=-1','pageSize=1000'])assert.equal((await req('monitoring?'+query,null,teacher)).status,400);
@@ -51,10 +51,10 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('lesson-release',{lesson:'2-1',status:'UNLOCKED'},teacher)).status,200);
    assert.equal((await req('unlock',{week:2,unlocked:true},teacher)).status,200);
    const latest=(await req('monitoring?student=student',null,teacher)).value;
-   assert.equal(latest.latestWeek,2);assert.equal(latest.currentWeek,2);assert.equal(latest.detail.done,0);assert.equal(latest.detail.total,43);
-   assert.equal(latest.detail.comparison.previous.id,1);assert.equal(latest.detail.comparison.previous.done,12);assert.equal(latest.detail.comparison.change,-26.67);
-   const all=(await req('monitoring?week=all&student=student',null,teacher)).value.detail;assert.equal(all.done,12);assert.equal(all.total,88);assert.equal(all.weeks.length,2);
-   assert.equal((await req('monitoring?week=1&compareWeek=2&student=student',null,teacher)).value.detail.comparison.change,26.67);
+   assert.equal(latest.latestWeek,2);assert.equal(latest.currentWeek,2);assert.equal(latest.detail.done,0);assert.equal(latest.detail.total,42);
+   assert.equal(latest.detail.comparison.previous.id,1);assert.equal(latest.detail.comparison.previous.done,11);assert.equal(latest.detail.comparison.change,-25);
+   const all=(await req('monitoring?week=all&student=student',null,teacher)).value.detail;assert.equal(all.done,11);assert.equal(all.total,86);assert.equal(all.weeks.length,2);
+   assert.equal((await req('monitoring?week=1&compareWeek=2&student=student',null,teacher)).value.detail.comparison.change,25);
    assert.equal((await req('monitoring?week=2&compareWeek=2',null,teacher)).status,400);
    assert.equal((await req('monitoring?compareWeek=99',null,teacher)).status,400);
   });
@@ -65,10 +65,10 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('content-read',{lesson:'2-1',student:'student2'},student)).status,200);
    assert.equal((await req('content-read',{lesson:'2-1'},student)).status,200);
    const week=(await req('monitoring?week=2&student=student',null,teacher)).value;
-   assert.equal(week.detail.done,1);assert.equal(week.detail.total,44);assert.equal(week.detail.categories.content.done,1);assert.equal(week.detail.categories.assignments.total,1);assert.equal(week.unlinkedAssignments,0);
+   assert.equal(week.detail.done,1);assert.equal(week.detail.total,43);assert.equal(week.detail.categories.content.done,1);assert.equal(week.detail.categories.assignments.total,1);assert.equal(week.unlinkedAssignments,0);
    assert.equal(week.students.find(s=>s.id==='student2').categories.content.done,0);
-   assert.equal((await req('monitoring?week=1&student=student',null,teacher)).value.detail.done,12);
-   assert.equal((await req('monitoring?week=all&student=student',null,teacher)).value.detail.done,13);
+   assert.equal((await req('monitoring?week=1&student=student',null,teacher)).value.detail.done,11);
+   assert.equal((await req('monitoring?week=all&student=student',null,teacher)).value.detail.done,12);
   });
   await t.test('Relocking weeks preserves their progress and release history across restart',async()=>{
    await req('unlock',{week:1,unlocked:false},teacher);
@@ -77,7 +77,7 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('content-read',{lesson:'2-1'},student)).status,403);
    await stop();await start();
    const data=(await req('monitoring?week=all&student=student',null,teacher)).value;
-   assert.deepEqual(data.weekOptions.map(w=>w.id),[1,2]);assert.equal(data.detail.done,13);assert.equal(data.detail.comparison.previous.done,12);
+   assert.deepEqual(data.weekOptions.map(w=>w.id),[1,2]);assert.equal(data.detail.done,12);assert.equal(data.detail.comparison.previous.done,11);
   });
   let lastSeen;
   await t.test('Last seen is durable student activity, not staff polling or a supplied student ID',async()=>{
@@ -113,9 +113,9 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    await req('mark',{id:submitted.value.id,score:5,status:'Returned for correction',feedback:'Add the definitions.'},teacher);
    const resubmitted=await req('submit',{...note,week:1},student);assert.equal(resubmitted.value.id,submitted.value.id);assert.equal(resubmitted.value.status,'Resubmitted');
    const own=(await req('my-progress?week=1',null,student)).value.detail;const staffView=(await req('monitoring?week=1&student=student',null,teacher)).value.detail;
-   assert(!('notes' in own));assert(!('notes' in own.weeks[0]));assert(!('notes' in staffView));assert.equal(own.done,12);assert.equal(own.total,beforeNotes.total);assert.equal(own.percent,beforeNotes.percent);assert.equal(own.done,staffView.done);
+   assert(!('notes' in own));assert(!('notes' in own.weeks[0]));assert(!('notes' in staffView));assert.equal(own.done,11);assert.equal(own.total,beforeNotes.total);assert.equal(own.percent,beforeNotes.percent);assert.equal(own.done,staffView.done);
    assert(!('notes' in (await req('my-progress?week=2',null,student)).value.detail));
-   await stop();await start();assert.equal((await req('state',null,student)).value.submissions.find(v=>v.id===submitted.value.id).week,1);assert.equal((await req('my-progress?week=1',null,student)).value.detail.done,12);
+   await stop();await start();assert.equal((await req('state',null,student)).value.submissions.find(v=>v.id===submitted.value.id).week,1);assert.equal((await req('my-progress?week=1',null,student)).value.detail.done,11);
   });
  }finally{await stop();}
 });

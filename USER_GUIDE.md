@@ -83,3 +83,14 @@ In My notes → Submit my notes, select the date, Daily/Weekly and the open lear
 
 ### Classroom notebook checks and progress
 Notebook uploads are optional and do not appear in learning progress, week comparisons or staff monitoring. Classroom notebook checks do not need to be repeated online. Teachers who want digital submissions can still use Notes & review; students can use My notes. Weekly progress tracks reading, exercises, quizzes, topic tests, reflections and assignments.
+
+### Weekly topics, subtopics and lesson templates
+Students open Learn, choose a bold subtopic title and work through its content, examples, optional experiment/video and end-of-subtopic practice. Previous/next navigation and a subtopic selector appear above and below the lesson. The final subtopic ends with one weekly topic quiz followed by one weekly reflection. The weekly list also links directly to the quiz and reflection. These open only when all subtopics in that week have been released.
+
+Teachers and admins open Teaching workspace or School management → Open weekly lesson template. Load an existing week, or enter a new week number and load it to start a new plan. Add/reorder subtopics, learning content, objectives, examples, YouTube links, practice questions, a weekly quiz, reflection prompt and multiple assignments. Drafts are private; incomplete drafts can be saved. Publish updates only the selected week. Uncheck Release this week to publish it in a locked state. Load published version restores the editor from the current published content. Existing records and question/subtopic IDs are preserved when editing existing items; earlier published versions are saved.
+
+Paste an HTTPS YouTube watch, short, share or embed URL into a subtopic’s video field. The lesson renders an embedded player inside the app. Teacher-entered content is plain text; raw HTML is not required.
+
+Assignments are grouped by week and topic. Each task has its own work date, deadline (WAT), marks and release status. Draft tasks stay private; locked or future scheduled tasks display a locked card without instructions. Publish releases a task when that week’s content is open. Several assignments can belong to one week. Use Assignments → Edit / release to change a task or its deadline.
+
+Weekly progress now counts one weekly quiz and one weekly reflection, alongside content read, unique practice attempts and released assignments. Historical assessment and reflection records remain stored. Note submissions remain excluded from progress.

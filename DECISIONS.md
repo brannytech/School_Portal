@@ -35,3 +35,10 @@ These supersede the first local-edition decisions.
 
 ### Optional classroom notebook checking
 Per user request, notebook submissions are excluded entirely from student and staff progress displays and monitoring API responses, including home progress and weekly lesson indicators. Weekly work percentages continue to use reading, exercises, quizzes, topic tests, reflections and assignments only. My notes / Notes & review remains available as a separate optional workflow, with existing uploads and feedback preserved.
+
+### Weekly teaching structure and authoring
+- Render subtopics rather than fixed days. Practice follows each subtopic; one quiz and reflection close the weekly topic. Keep legacy assessment/reflection endpoints for older clients, but the current interface uses week-scoped activities. Historical mastery submissions count as the weekly quiz; historical reflections are capped at one per week.
+- Teacher templates are private drafts until published. Publishing replaces only the selected week and stores the previous version, while retaining stable IDs and historical student records. Editing the published revision is checked to prevent overwriting a concurrent publish.
+- Support 1–30 subtopics and 1–100 teacher-authored practice/quiz questions, avoiding artificial fixed-length question banks. Teachers provide answers and feedback; shipped mathematics remains independently verified.
+- Assignment releases are separate from content releases: draft, locked, published or scheduled, with a work date and explicit WAT deadline. Student submission endpoints enforce release status.
+- YouTube links are validated and converted to a privacy-enhanced embedded player; teacher HTML is escaped.

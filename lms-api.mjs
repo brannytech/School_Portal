@@ -1,6 +1,7 @@
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {db,save,hash} from './store.mjs';
 import {academicSession} from './context.mjs';
+import {rememberLearningReleases} from './learning-releases.mjs';
 import {gradeAssessment,masteryBand,calculate,defaultPolicy,checkAnswer} from './dist/domain.js';
 
 const stamp=()=>new Date().toISOString();
@@ -30,7 +31,7 @@ export async function lmsApi(x){
  if(endpoint==='assessment/history'&&method==='GET'){termAccess(u,c,s,t);json(db.assessmentAttempts.filter(a=>a.sessionId===sessionId&&a.class===c&&a.subject===s&&a.term===t&&(staff||a.student===u.id)).map(({questions,answers,...a})=>a));return true;}
  if(endpoint==='lesson-release'&&method==='POST'){
   needStaff();const w=course(c,s,t).find(w=>w.lessons.some(l=>l.id===b.lesson));if(!w)fail(404,'Lesson not found.');if(!['DRAFT','SCHEDULED','LOCKED','UNLOCKED','ARCHIVED'].includes(b.status))fail(400,'Choose a valid publication status.');if(b.status==='SCHEDULED'&&!Number.isFinite(Date.parse(b.releaseAt)))fail(400,'Choose a valid release date.');
-  let r=db.releases.find(r=>r.sessionId===sessionId&&r.class===c&&r.subject===s&&r.term===t&&r.lesson===b.lesson);if(!r){r={id:randomUUID(),...ctx,lesson:b.lesson};db.releases.push(r);}Object.assign(r,{status:b.status,releaseAt:b.releaseAt?new Date(b.releaseAt).toISOString():null,updated:stamp(),teacher:u.id});audit(u,`Set lesson ${b.lesson} to ${b.status} in ${sessionId}`);await save();json(r);return true;
+  await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);let r=db.releases.find(r=>r.sessionId===sessionId&&r.class===c&&r.subject===s&&r.term===t&&r.lesson===b.lesson);if(!r){r={id:randomUUID(),...ctx,lesson:b.lesson};db.releases.push(r);}Object.assign(r,{status:b.status,releaseAt:b.releaseAt?new Date(b.releaseAt).toISOString():null,updated:stamp(),teacher:u.id});audit(u,`Set lesson ${b.lesson} to ${b.status} in ${sessionId}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json(r);return true;
  }
  if(endpoint==='discussion-control'&&method==='POST'){
   const q=db.questions.find(q=>q.id===b.id);allowed({...q,student:u.id});if(!q)fail(404,'Question not found.');lessonAccess(u,q.class,q.subject,q.term,q.lesson);

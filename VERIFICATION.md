@@ -37,3 +37,13 @@ No live PostgreSQL service or S3 credentials were available, so provider migrati
 - `npm test`: 40 tests pass, including fixture directories containing 106 teachers, 110 subjects and 102 current-session assignments.
 - Tested bounded non-overlapping pages, last-page counts, case-insensitive search, combined class/subject/status filters matching the same assignment, assigned/unassigned filters, session isolation, invalid input rejection and admin-only access.
 - Browser checks covered teacher and subject search, unassigned subjects, per-tab filter persistence, empty-state reset, teacher-to-assignment navigation, teacher registration defaults and required-photo switching. Phone width fits without horizontal overflow.
+
+## Student progress monitoring
+
+- Regression suite: 49 passing tests, including a fixture with exactly 12/45 weekly work done and an unlinked assignment explicitly excluded from progress.
+- Checked duplicate quiz/assignment attempts, unknown/deleted questions, draft lessons, week/search/page filters, assignment-week validation, staff class/subject isolation, durable last-seen timestamps, CSRF, and attempts to report activity for another student.
+- Browser: student sandbox login produced a real last-seen timestamp visible to the assigned teacher; verified learning-week filters, per-student activity graphs and weekly totals.
+
+- Released-week checks: unreleased/draft weeks excluded, latest/previous and arbitrary week comparison, combined released-week totals, idempotent content-read confirmation, correct assignment-week attribution, release-history persistence after locking and restart.
+
+- Browser confirmation: a sandbox student marked Week 1 content read; the assigned teacher saw it in Week 1 only, linked the sample homework to Week 1, and compared it with released Week 8. All-released-week mode and arbitrary comparison selectors were checked. Mobile layout has no horizontal overflow and rendered text passes contrast checks.

@@ -59,3 +59,19 @@ With registration permission, a teacher can register students in their assigned 
 In **School management → Teachers and subjects directory**, switch between **Teachers**, **Subjects** and **Teaching assignments**. Each tab keeps its own search and filters. Search teacher names/emails or subject names; filter by class, subject, teacher status, or assigned/unassigned where relevant. Assignment filters use the selected academic session.
 
 Choose 10, 20 or 50 entries per page, use Previous/Next, or jump directly to a page. Clear filters recovers from an empty search. Teacher rows provide subject assignment, privilege and recovery actions; subject rows show teacher counts and link to their teaching assignments. Assignments can be removed from their own paginated tab. Phone results use cards.
+
+## Student progress and last seen
+
+Teachers: select **Class progress** in Teaching workspace, the desktop sidebar, or **More** on a phone. Administrators can select **Monitor students** from School management. **Students → Progress** opens an individual learner’s progress. Choose the class, subject, term and academic session at the top; teachers can only monitor assigned class/subject combinations.
+
+Search an active student by name, email or admission number; filter by learning week; use the paginated list to open individual progress. The graphs show lessons marked as read by students, unique exercises attempted, lesson quizzes submitted, topic mastery tests submitted, reflections submitted and assignments submitted. Weekly cards display **work done / released-week activities**, for example 12 / 45. Only released lessons count; their history stays available if later locked. Unreleased and draft-only content is excluded. Exercise attempts count as work done regardless of correctness; practice accuracy is shown separately. Retakes and assignment resubmissions do not inflate completed-task counts. Notes are displayed separately because the platform has no fixed expected number of daily notes.
+
+When creating assignments, select **Learning week** to include them in that week’s progress. Assignments without a learning week are excluded until linked using **Link assignment to week** in Class progress.
+
+Last seen records the student’s latest login or recent foreground interaction, across the account rather than just the selected subject. Activity is saved privately and survives restarts. The app sends at most one update per minute while a visible student tab is recently active; idle/background tabs stop reporting. Staff opening the monitor never advances a student’s last-seen time. **Not recorded yet** means no timestamp has been captured since tracking was introduced. Times display in WAT. These indicators describe activity, not attendance or proof of learning. The staff dashboard refreshes every minute while visible, or immediately using **Refresh progress**.
+
+### Released-week comparison
+
+Class progress defaults to **Latest released week**. Select an earlier released week, or **All released weeks** for combined progress. Use **Compare with** to place two released weeks side by side; counts and completion percentages appear for content read, exercises, quizzes, reflections and assignments. Changes are shown in percentage points so weeks with different workloads can be compared. **Lowest completion first** sorts students for the selected view to help teachers find learners who need encouragement. Consider each week’s release date before interpreting low completion.
+
+Students use **Mark lesson as read** at the end of lesson content; opening a lesson alone does not mark its content consumed. Initial content-read tracking is self-reported and is separate from assessment scores. New assignments should be linked to their learning week; future weeks and their assignments do not enter the totals until released. Release history and earlier progress remain available after a week is locked again.

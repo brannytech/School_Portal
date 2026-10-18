@@ -40,4 +40,3 @@ document.addEventListener('click',event=>{
  if(action==='adir-teacher-assignments'||action==='adir-subject-assignments'){directoryKind='allocations';directoryFilters.allocations={...directoryDefaults(),search:button.dataset.email||'',filterSubject:button.dataset.subject||''};replaceAdminDirectory();}
 });
 document.addEventListener('submit',event=>{const form=event.target;if(form.dataset.form!=='adir-page')return;event.preventDefault();event.stopImmediatePropagation();directoryFilters[directoryKind].page=Number(form.elements.page.value);loadAdminDirectory();},true);
-boot();

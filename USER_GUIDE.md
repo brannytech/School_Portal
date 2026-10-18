@@ -53,3 +53,9 @@ Administrators: open **School management → Teachers & subjects → Set teacher
 All teachers can view registered students in their assigned classes under **Students** (desktop sidebar, Teaching workspace, or **More → Students** on phones). Administrators can view all students. Search by name, school email or admission number; combine class and status filters; choose 10, 20 or 50 students per page, use Previous/Next, or jump to a page. Phone lists use cards to keep actions within reach.
 
 With registration permission, a teacher can register students in their assigned classes in the current session and upload initial photos. New accounts remain pending. With management permission, a teacher can approve, reject, suspend, deactivate or remove students, update their photos, and move them between the teacher’s assigned classes. Initial photos are still required before approval. Account removal preserves academic history. Administrators control teacher assignments and privileges separately.
+
+## Teacher, subject and assignment directories
+
+In **School management → Teachers and subjects directory**, switch between **Teachers**, **Subjects** and **Teaching assignments**. Each tab keeps its own search and filters. Search teacher names/emails or subject names; filter by class, subject, teacher status, or assigned/unassigned where relevant. Assignment filters use the selected academic session.
+
+Choose 10, 20 or 50 entries per page, use Previous/Next, or jump directly to a page. Clear filters recovers from an empty search. Teacher rows provide subject assignment, privilege and recovery actions; subject rows show teacher counts and link to their teaching assignments. Assignments can be removed from their own paginated tab. Phone results use cards.

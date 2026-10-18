@@ -31,3 +31,9 @@ No live PostgreSQL service or S3 credentials were available, so provider migrati
 - Verified that only admins can grant privileges; teachers cannot create staff, cross assigned-class boundaries or move students to unassigned classes.
 - Registration requires an initial photo and remains pending until an authorised person approves it. Privilege persistence, immediate revocation and loss of a class assignment are covered.
 - Browser checks: admin privilege form, teacher registration fields restricted to STUDENT/assigned classes, searchable directory, combined filters, clear-filter empty state, phone card layout and light/dark contrast.
+
+## Teacher and subject directory pagination
+
+- `npm test`: 40 tests pass, including fixture directories containing 106 teachers, 110 subjects and 102 current-session assignments.
+- Tested bounded non-overlapping pages, last-page counts, case-insensitive search, combined class/subject/status filters matching the same assignment, assigned/unassigned filters, session isolation, invalid input rejection and admin-only access.
+- Browser checks covered teacher and subject search, unassigned subjects, per-tab filter persistence, empty-state reset, teacher-to-assignment navigation, teacher registration defaults and required-photo switching. Phone width fits without horizontal overflow.

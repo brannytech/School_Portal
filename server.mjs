@@ -6,6 +6,7 @@ import {db,save,hash,matches,dataDir,sql} from './store.mjs';
 import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
 import {studentApi} from './student-api.mjs';
+import {adminDirectory} from './admin-directory.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {durableSessions} from './database.mjs';
@@ -78,6 +79,7 @@ async function handle(req,res){
  if(await profileApi({endpoint,method,url,req,res,u,body,json,fail,audit,rate}))return;
  const c=u.role==='STUDENT'?u.class:text(b.class||url.searchParams.get('class')||'SS1');const s=text(b.subject||url.searchParams.get('subject')||'Mathematics');const t=Number(b.term||url.searchParams.get('term')||1);
  if(![1,2,3].includes(t))fail(400,'Choose a valid term.');
+ if(adminDirectory({endpoint,method,url,u,json,fail}))return;
  if(await studentApi({endpoint,method,b,url,u,c,json,fail,audit,sessions}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
  if(endpoint==='state'&&method==='GET'){

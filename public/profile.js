@@ -18,8 +18,8 @@ render=function() {
  if(footer)footer.innerHTML=btn('logout',icon('logout')+' Sign out','subtle account-footer-logout');
 };
 
-function registrationPhotoFields() {
- return `<div class="field profile-photo-field"><label for="registration-photo">Initial profile photo <span class="muted">(required for students)</span></label><input id="registration-photo" name="profilePhoto" type="file" accept="image/jpeg,image/png" required aria-describedby="registration-photo-help"><p id="registration-photo-help" class="small muted">Upload the student’s photo. They can update it later from Profile. JPEG or PNG, up to 10 MB before compression.</p><div class="profile-photo-preview"></div></div>`;
+function registrationPhotoFields(required=true) {
+ return `<div class="field profile-photo-field"><label for="registration-photo">Initial profile photo <span class="muted">(required for students)</span></label><input id="registration-photo" name="profilePhoto" type="file" accept="image/jpeg,image/png" ${required?'required':''} aria-describedby="registration-photo-help"><p id="registration-photo-help" class="small muted">Upload the student’s photo. They can update it later from Profile. JPEG or PNG, up to 10 MB before compression.</p><div class="profile-photo-preview"></div></div>`;
 }
 let displayedAccount=null;
 function openAccount(account=user) {

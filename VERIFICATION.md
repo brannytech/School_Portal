@@ -47,3 +47,11 @@ No live PostgreSQL service or S3 credentials were available, so provider migrati
 - Released-week checks: unreleased/draft weeks excluded, latest/previous and arbitrary week comparison, combined released-week totals, idempotent content-read confirmation, correct assignment-week attribution, release-history persistence after locking and restart.
 
 - Browser confirmation: a sandbox student marked Week 1 content read; the assigned teacher saw it in Week 1 only, linked the sample homework to Week 1, and compared it with released Week 8. All-released-week mode and arbitrary comparison selectors were checked. Mobile layout has no horizontal overflow and rendered text passes contrast checks.
+
+### Weekly student learning path and notebooks
+- Full npm test: 51 tests passed, including private personal progress, equality with staff totals, current/previous/all week calculations, unknown/locked week rejection, historical note linking ownership, CSRF, note correction/resubmission counts and restart persistence. Focused monitoring suite rerun after aggregate note display update: 11 tests passed.
+- Browser verified the student Learn page shows activity counts beside weekly lessons, week-one detail selects the matching week, and the notebook form requires a learning week. Mobile width 326px: document width 311px, no horizontal overflow.
+- Notes remain separately counted without inventing a required upload quota.
+
+### Notes removed from progress
+Full build and regression suite: 51 tests passed. Confirmed notes and unlinked-note reminders are absent from monitoring responses and student weekly displays; notebook submission, linking and correction workflows still persist. Tests assert weekly completion percentage and denominator remain unchanged after note uploads and resubmissions. Browser checked the mobile student learning path and progress detail without note metrics.

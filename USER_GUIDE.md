@@ -75,3 +75,11 @@ Last seen records the student’s latest login or recent foreground interaction,
 Class progress defaults to **Latest released week**. Select an earlier released week, or **All released weeks** for combined progress. Use **Compare with** to place two released weeks side by side; counts and completion percentages appear for content read, exercises, quizzes, reflections and assignments. Changes are shown in percentage points so weeks with different workloads can be compared. **Lowest completion first** sorts students for the selected view to help teachers find learners who need encouragement. Consider each week’s release date before interpreting low completion.
 
 Students use **Mark lesson as read** at the end of lesson content; opening a lesson alone does not mark its content consumed. Initial content-read tracking is self-reported and is separate from assessment scores. New assignments should be linked to their learning week; future weeks and their assignments do not enter the totals until released. Release history and earlier progress remain available after a week is locked again.
+
+### Student weekly learning and notebook progress
+Open Learn to see work done next to each released week’s lessons. View weekly progress opens your own activity breakdown, practice accuracy, previous-week comparisons and all released weeks. Student and teacher views use the same weekly work calculation. A lesson is read only after Mark lesson as read; retakes count once.
+
+In My notes → Submit my notes, select the date, Daily/Weekly and the open learning week, then attach photos. Both daily and weekly notes are stored under that selected week in My notes. Existing notes without a week show Choose learning week; link them once without re-uploading. Notes remain private and retain teacher marks and correction history. Notebook submissions are optional and are excluded from progress reports.
+
+### Classroom notebook checks and progress
+Notebook uploads are optional and do not appear in learning progress, week comparisons or staff monitoring. Classroom notebook checks do not need to be repeated online. Teachers who want digital submissions can still use Notes & review; students can use My notes. Weekly progress tracks reading, exercises, quizzes, topic tests, reflections and assignments.

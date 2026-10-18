@@ -85,7 +85,7 @@ async function handle(req,res){
  if(![1,2,3].includes(t))fail(400,'Choose a valid term.');
  if(adminDirectory({endpoint,method,url,u,json,fail}))return;
  if(await studentApi({endpoint,method,b,url,u,c,json,fail,audit,sessions}))return;
- if(await monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,audit,json,fail}))return;
+ if(await monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,termAccess,audit,json,fail}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
  if(endpoint==='state'&&method==='GET'){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
@@ -111,8 +111,9 @@ async function handle(req,res){
  if(endpoint==='submit'&&method==='POST'){
   if(u.role!=='STUDENT')fail(403,'Only students submit work.');termAccess(u,c,s,t);const kind=b.kind==='note'?'note':'assignment';const files=b.files||[];needed(files.length,'A photo');checkFiles(u,files,c,s,t,kind);let assignment;
   if(kind==='assignment'){assignment=db.assignments.find(v=>v.id===b.assignment&&belongs(v)&&v.class===c&&v.subject===s&&v.term===t);if(!assignment)fail(404,'Assignment not found.');}
+  if(kind==='note'){const week=course(c,s,t).find(w=>w.id===Number(b.week));if(!week||!week.lessons.some(l=>releaseState(c,s,t,l.id,scopeKey).available))fail(400,'Choose an open learning week for your notes.');}
   if(kind==='note'&&!/^\d{4}-\d{2}-\d{2}$/.test(b.date||''))fail(400,'Choose a note date.');
-  const prev=db.submissions.find(v=>v.student===u.id&&belongs(v)&&v.class===c&&v.subject===s&&v.term===t&&v.kind===kind&&(kind==='assignment'?v.assignment===b.assignment:v.date===b.date&&v.frequency===b.frequency));
+  const prev=db.submissions.find(v=>v.student===u.id&&belongs(v)&&v.class===c&&v.subject===s&&v.term===t&&v.kind===kind&&(kind==='assignment'?v.assignment===b.assignment:v.date===b.date&&v.frequency===(b.frequency==='Weekly'?'Weekly':'Daily')&&(Number(v.week)===Number(b.week)||!v.week)));
   if(prev&&kind==='assignment'&&!assignment.resubmission&&!['Needs redo','Returned for correction'].includes(prev.status))fail(409,'Your teacher has not enabled resubmission.');
   if(prev&&kind==='note'&&!['Needs redo','Returned for correction'].includes(prev.status))fail(409,'These notes have already been submitted.');
   if(prev)db.versions.push({id:randomUUID(),submission:prev.id,snapshot:structuredClone(prev),created:new Date().toISOString()});const sub=prev||{id:randomUUID(),student:u.id,name:u.name,class:c,subject:s,term:t,kind};Object.assign(sub,{assignment:assignment?.id,date:text(b.date),frequency:b.frequency==='Weekly'?'Weekly':'Daily',files,status:prev?'Resubmitted':assignment&&Date.now()>Date.parse(assignment.due+'T23:59:59+01:00')?'Late':'Submitted',max:kind==='note'?db.policy.noteMaximum:assignment?.max||100,week:Number(b.week)||null,topic:text(b.topic),created:new Date().toISOString(),score:null,feedback:''});if(!prev)db.submissions.push(sub);await save();json(sub,201);return;

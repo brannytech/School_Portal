@@ -21,24 +21,32 @@ export function studentWorkSummary(student,weeks,records){
   const homework=assignments.filter(a=>Number(a.week)===week.id),markedCorrect=[...answers.values()].filter(Boolean).length;
   correct+=markedCorrect;attempted+=answers.size;
   const categories={content:ratio(new Set(progress.filter(p=>ids.has(p.lesson)&&p.contentConsumedAt).map(p=>p.lesson)).size,lessons.length),exercises:ratio(answers.size,valid.size),quizzes:ratio(quizLessons.size,lessons.length),mastery:ratio(lessons.length&&week.quiz?.length&&mastery?1:0,lessons.length&&week.quiz?.length?1:0),reflections:ratio(reflected.size,lessons.length),assignments:ratio(homework.filter(a=>submittedAssignments.has(a.id)).length,homework.length)};
-  weekly.push({id:week.id,title:week.title,releasedAt:week.releasedAt||null,...ratio(Object.values(categories).reduce((n,c)=>n+c.done,0),Object.values(categories).reduce((n,c)=>n+c.total,0)),categories,lessonsCompleted:new Set(progress.filter(p=>ids.has(p.lesson)&&p.complete).map(p=>p.lesson)).size,lessonsTotal:lessons.length,notes:submissions.filter(s=>s.kind==='note'&&Number(s.week)===week.id).length});
+  weekly.push({id:week.id,title:week.title,releasedAt:week.releasedAt||null,...ratio(Object.values(categories).reduce((n,c)=>n+c.done,0),Object.values(categories).reduce((n,c)=>n+c.total,0)),categories,lessonsCompleted:new Set(progress.filter(p=>ids.has(p.lesson)&&p.complete).map(p=>p.lesson)).size,lessonsTotal:lessons.length});
  }
  const categories=Object.fromEntries(monitoringCategories.map(key=>[key,ratio(weekly.reduce((n,w)=>n+w.categories[key].done,0),weekly.reduce((n,w)=>n+w.categories[key].total,0))]));
 
- return {id:student.id,name:student.name,email:student.email,admission:student.admission||'',status:student.status,weeks:weekly,categories,...ratio(Object.values(categories).reduce((n,c)=>n+c.done,0),Object.values(categories).reduce((n,c)=>n+c.total,0)),practiceAccuracy:attempted?Math.round(correct/attempted*100):null,exerciseAttempts:practice.filter(a=>weeks.some(w=>w.lessons.some(l=>l.id===a.lesson&&l.questions.some(q=>q.id===a.question&&q.stage!=='quiz')))).length,quizAttempts:assessments.filter(a=>a.kind==='quiz'&&weeks.some(w=>w.lessons.some(l=>l.id===a.lesson))).length,notes:submissions.filter(s=>s.kind==='note').length,generalAssignments:0};
+ return {id:student.id,name:student.name,email:student.email,admission:student.admission||'',status:student.status,weeks:weekly,categories,...ratio(Object.values(categories).reduce((n,c)=>n+c.done,0),Object.values(categories).reduce((n,c)=>n+c.total,0)),practiceAccuracy:attempted?Math.round(correct/attempted*100):null,exerciseAttempts:practice.filter(a=>weeks.some(w=>w.lessons.some(l=>l.id===a.lesson&&l.questions.some(q=>q.id===a.question&&q.stage!=='quiz')))).length,quizAttempts:assessments.filter(a=>a.kind==='quiz'&&weeks.some(w=>w.lessons.some(l=>l.id===a.lesson))).length,generalAssignments:0};
 }
 
-export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,audit,json,fail}){
+export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,termAccess,audit,json,fail}){
  if(endpoint==='content-read'&&method==='POST'){
   if(u.role!=='STUDENT')fail(403,'Only a student can mark their lesson as read.');const week=lessonAccess(u,c,s,t,b.lesson);if(!week.lessons.some(l=>l.id===b.lesson))fail(404,'Lesson not found.');await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);let progress=db.progress.find(v=>v.student===u.id&&v.sessionId===academicSession()&&v.class===c&&v.subject===s&&v.term===t&&v.lesson===b.lesson);if(!progress){progress={id:randomUUID(),sessionId:academicSession(),student:u.id,class:c,subject:s,term:t,lesson:b.lesson,answers:{},reflectionDone:false};db.progress.push(progress);}progress.contentConsumedAt??=new Date().toISOString();await save();json({contentConsumedAt:progress.contentConsumedAt});return true;
  }
  if(endpoint==='assignment-week'&&method==='POST'){
   if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);const assignment=db.assignments.find(a=>a.id===b.id&&a.sessionId===academicSession()&&a.class===c&&a.subject===s&&a.term===t);if(!assignment)fail(404,'Assignment not found.');if(!course(c,s,t).some(w=>w.id===Number(b.week)))fail(400,'Choose a valid learning week.');assignment.week=Number(b.week);audit(u,`Linked assignment ${assignment.id} to week ${assignment.week}`);await save();json({ok:true});return true;
  }
- if(endpoint!=='monitoring'||method!=='GET')return false;
- if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);
+ if(endpoint==='note-week'&&method==='POST'){
+  if(u.role!=='STUDENT')fail(403,'Only students can link their own notes.');termAccess(u,c,s,t);
+  const note=db.submissions.find(v=>v.id===b.id&&v.kind==='note'&&v.student===u.id&&v.sessionId===academicSession()&&v.class===c&&v.subject===s&&v.term===t);
+  if(!note)fail(404,'Note submission not found.');if(note.week)fail(409,'This note already has a learning week.');
+  const history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);if(!history.some(v=>v.week===Number(b.week)))fail(400,'Choose a released learning week.');
+  note.week=Number(b.week);audit(u,`Linked note ${note.id} to week ${note.week}`);await save();json({ok:true});return true;
+ }
+ const personal=endpoint==='my-progress';
+ if((endpoint!=='monitoring'&&!personal)||method!=='GET')return false;
+ if(personal){if(u.role!=='STUDENT')fail(403,'Student access required.');termAccess(u,c,s,t);}else{if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);}
  if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Choose a valid class and subject.');
- const sessionId=academicSession(),p=url.searchParams,weekChoice=p.get('week')||'latest',compareChoice=p.get('compareWeek')||'previous',pageSize=Number(p.get('pageSize')||10),requested=Number(p.get('page')||1),search=(p.get('search')||'').trim().slice(0,160).toLocaleLowerCase(),selected=p.get('student')||'';
+ const sessionId=academicSession(),p=url.searchParams,weekChoice=p.get('week')||'latest',compareChoice=p.get('compareWeek')||'previous',pageSize=Number(p.get('pageSize')||10),requested=Number(p.get('page')||1),search=(p.get('search')||'').trim().slice(0,160).toLocaleLowerCase(),selected=personal?u.id:p.get('student')||'';
  if(![10,20,50].includes(pageSize)||!Number.isSafeInteger(requested)||requested<1)fail(400,'Choose a valid page and page size.');
  const history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState),released=new Set(history.map(r=>r.lesson));
  const weeks=course(c,s,t).map(w=>({...w,lessons:w.lessons.filter(l=>released.has(l.id)),quiz:w.lessons.every(l=>released.has(l.id))?w.quiz:[],releasedAt:history.filter(r=>r.week===w.id&&r.releasedAt).map(r=>r.releasedAt).sort()[0]||null})).filter(w=>w.lessons.length).sort((a,b)=>a.id-b.id);
@@ -48,7 +56,7 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
  const previous=compareChoice==='previous'?weeks.filter(w=>w.id<current).at(-1)?.id||null:Number(compareChoice);
  if(compareChoice!=='previous'&&(!weeks.some(w=>w.id===previous)||previous===current))fail(400,'Choose a different released week for comparison.');
  const chosen=weekChoice==='all'?weeks:weeks.filter(w=>w.id===current);
- const students=db.users.filter(student=>student.role==='STUDENT'&&student.status==='ACTIVE'&&db.enrolments.some(e=>e.student===student.id&&e.sessionId===sessionId&&e.class===c));
+ const students=db.users.filter(student=>(!personal||student.id===u.id)&&student.role==='STUDENT'&&student.status==='ACTIVE'&&db.enrolments.some(e=>e.student===student.id&&e.sessionId===sessionId&&e.class===c));
  if(selected&&!students.some(student=>student.id===selected))fail(404,'Student not found in this class.');
  const fits=v=>v.sessionId===sessionId&&v.class===c&&v.subject===s&&v.term===t;
  const raw=Object.fromEntries(['practiceAttempts','progress','assessmentAttempts','submissions','reflections','assignments'].map(key=>[key,db[key].filter(fits)]));
@@ -69,5 +77,6 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
  const categories=Object.fromEntries(monitoringCategories.map(key=>[key,ratio(all.reduce((n,v)=>n+v.categories[key].done,0),all.reduce((n,v)=>n+v.categories[key].total,0))]));
  const aggregateWeeks=weeks.map(w=>{const values=all.map(v=>v.allWeeks.find(x=>x.id===w.id));return {id:w.id,title:w.title,releasedAt:w.releasedAt,categories:Object.fromEntries(monitoringCategories.map(key=>[key,ratio(values.reduce((n,v)=>n+v.categories[key].done,0),values.reduce((n,v)=>n+v.categories[key].total,0))])),...ratio(values.reduce((n,v)=>n+v.done,0),values.reduce((n,v)=>n+v.total,0))};});
  const detail=selected?all.find(v=>v.id===selected)||summaryFor(students.find(v=>v.id===selected)):null;
- json({students:all.slice((page-1)*pageSize,page*pageSize),total,pages,page,pageSize,latestWeek:latest,currentWeek:current,compareWeek:previous,weekChoice,weekOptions:weeks.map(w=>({id:w.id,title:w.title,releasedAt:w.releasedAt})),unlinkedAssignments:raw.assignments.filter(a=>!course(c,s,t).some(w=>w.id===Number(a.week))).length,summary:{categories,weeks:aggregateWeeks.filter(w=>chosen.some(c=>c.id===w.id)),allWeeks:aggregateWeeks,comparison:comparisonFor(aggregateWeeks),notes:all.reduce((n,v)=>n+v.notes,0),recentlyActive:all.filter(v=>v.recentlyActive).length,...ratio(all.reduce((n,v)=>n+v.done,0),all.reduce((n,v)=>n+v.total,0))},detail,generatedAt:new Date().toISOString()});return true;
+ if(personal){const detail=summaryFor(u);json({detail,weekChoice,currentWeek:current,compareWeek:previous,weekOptions:weeks.map(w=>({id:w.id,title:w.title,releasedAt:w.releasedAt})),generatedAt:new Date().toISOString()});return true;}
+ json({students:all.slice((page-1)*pageSize,page*pageSize),total,pages,page,pageSize,latestWeek:latest,currentWeek:current,compareWeek:previous,weekChoice,weekOptions:weeks.map(w=>({id:w.id,title:w.title,releasedAt:w.releasedAt})),unlinkedAssignments:raw.assignments.filter(a=>!course(c,s,t).some(w=>w.id===Number(a.week))).length,summary:{categories,weeks:aggregateWeeks.filter(w=>chosen.some(c=>c.id===w.id)),allWeeks:aggregateWeeks,comparison:comparisonFor(aggregateWeeks),recentlyActive:all.filter(v=>v.recentlyActive).length,...ratio(all.reduce((n,v)=>n+v.done,0),all.reduce((n,v)=>n+v.total,0))},detail,generatedAt:new Date().toISOString()});return true;
 }

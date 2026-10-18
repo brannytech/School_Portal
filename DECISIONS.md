@@ -26,3 +26,12 @@ These supersede the first local-edition decisions.
 
 19. Add account-level student last-seen timestamps in student_presence, separate from academic records. Record successful student login and throttled authenticated foreground activity, never staff polling. Preserve timestamps through backups/restores; keep class/subject/session authorisation on the monitoring endpoint.
 20. Define a work unit as one released lesson marked read, one released non-quiz exercise attempted, one submitted lesson quiz, one submitted topic mastery test, one reflection or one week-linked assignment submission. Count each once; separate accuracy and note submissions. Weekly denominators use published lesson tasks and explicitly week-linked assignments. Unlinked assignments do not enter progress until linked. Default to the latest released week, support arbitrary week comparison and all-released-week totals, and preserve release history when weeks are relocked and display active-account progress with searchable pagination.
+
+### Weekly student progress and notes
+- Share the released-week calculation between staff monitoring and a private my-progress endpoint, which always derives the student from the authenticated session and honours term/session access.
+- Require an open learning week on every new note submission. Preserve date/frequency and correction history, distinguish identical dates across weeks, and allow owners to link unlinked historical notes to a previously released week without guessing from calendar dates.
+- Display notebook counts separately from percentage completion; there is no configured notebook requirement to use as a denominator.
+- Place a compact progress indicator with each week’s lessons and provide detailed activity breakdowns and week comparisons from the learning path.
+
+### Optional classroom notebook checking
+Per user request, notebook submissions are excluded entirely from student and staff progress displays and monitoring API responses, including home progress and weekly lesson indicators. Weekly work percentages continue to use reading, exercises, quizzes, topic tests, reflections and assignments only. My notes / Notes & review remains available as a separate optional workflow, with existing uploads and feedback preserved.

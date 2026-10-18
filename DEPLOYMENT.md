@@ -40,6 +40,8 @@ npm run start:production
 
 The setup command writes a private `.env.production` (ignored by git) with a generated session secret and a generated administrator password, which it prints once. It refuses to reuse a data folder that already has records, and it never starts with demonstration users. After your first sign-in, delete the `ADMIN_PASSWORD` line from `.env.production`. Add `--insecure-http` only if you must serve the app over plain HTTP on a private network; use HTTPS in front of it for anything public.
 
+**Port already in use (`EADDRINUSE`)?** Another program, or an earlier copy of this app, is using the port. Open `.env.production` and change the line `PORT=3000` to a free port such as `PORT=3100`, then start again and open `http://127.0.0.1:3100`. (For a new setup you can also pass `--port 3100` to `npm run setup:production`.) To find what is using port 3000 on Windows: `netstat -ano | findstr :3000`, then `taskkill /PID <number> /F`.
+
 Then, as administrator: create or approve the teachers and students, assign teachers to classes and subjects, and release the lessons. Students who forget their password use “Forgot your password?” on the sign-in page.
 
 ## PostgreSQL

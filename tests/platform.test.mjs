@@ -9,7 +9,7 @@ const port=0;let root='';
 const processServer=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,DEMO_PASSWORD:'Learn@2026!',NODE_ENV:'test',SELF_REGISTRATION:'true'},stdio:['ignore','pipe','pipe']});
 let serverOutput='';processServer.stdout.on('data',b=>{serverOutput+=b;const match=serverOutput.match(/ready at (http:\/\/127\.0\.0\.1:\d+)/);if(match)root=match[1];});processServer.stderr.on('data',b=>serverOutput+=b);
 
-async function request(route,data,session={},method){const r=await fetch(root+'/api/'+route,{method:method||(data?'POST':'GET'),headers:{'Content-Type':'application/json',Cookie:session.cookie||'','X-CSRF-Token':session.csrf||''},...(data?{body:JSON.stringify(data)}:{})});const json=await r.json();return {status:r.status,value:json,cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+async function request(route,data,session={},method){const r=await fetch(root+'/api/'+route,{method:method||(data?'POST':'GET'),headers:{'Content-Type':'application/json',Cookie:session.cookie||'','X-CSRF-Token':session.csrf||''},...(data?{body:JSON.stringify(data)}:{})});const json=await r.json();return {status:r.status,value:json,revision:r.headers.get('X-Content-Revision'),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 async function login(email){const r=await request('login',{email,password:'Learn@2026!'});assert.equal(r.status,200,JSON.stringify(r.value));return {cookie:r.cookie,csrf:r.value.csrf};}
 const context={class:'SS1',subject:'Mathematics',term:1};
 test('School portal: approval, isolation, content, submissions and teacher workflows',async t=>{
@@ -78,8 +78,8 @@ test('School portal: approval, isolation, content, submissions and teacher workf
  await t.test('Teachers publish validated content without exposing answer keys; terms retain separate records',async()=>{
   assert.equal((await request('course',null,student)).status,403);
   assert.equal((await request('course',{...context,weeks:[{id:1,title:'Incomplete lesson'}]},teacher)).status,400);
-  const source=(await request('course',null,teacher)).value;assert.equal(source.length,8);
-  assert.equal((await request('course',{...context,weeks:source},teacher)).status,200);
+  const source=await request('course',null,teacher);assert.equal(source.value.length,8);
+  assert.equal((await request('course',{...context,weeks:source.value,revision:source.revision},teacher)).status,200);
   assert.equal((await request('lesson/1-1',null,student)).value.questions[0].check,undefined);
   await request('current-term',{currentTerm:2},admin);
   assert.equal((await request('state?term=2',null,student)).value.termLocked,false);

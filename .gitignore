@@ -6,6 +6,7 @@ test-results/
 
 dist/
 backups/
+.snapshots/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

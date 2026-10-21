@@ -1,5 +1,17 @@
 # Upgrade verification — 17 October 2026 (Africa/Lagos)
 
+## Latest — Phase 1, 21 October 2026 (Africa/Lagos)
+
+Final `npm test`: **70 passed**, 23 top-level tests; **0 failed/cancelled/skipped**, including build/syntax checks. `npm run verify-math` passed all 2,600 active curriculum instances, 392 preserved-bank checks, 900 log cells and 1,000 antilog cells. Phase 1 browser acceptance: **8 checks passed**; existing three-role/mobile smoke: **10 checks passed**. No uncaught browser errors. Structured lesson/publication-history/assessment backup restoration passed; 34 pre-phase backed-up tables in the existing school database compared unchanged, with zero FK violations. See [Phase 1 report and evidence locations](docs/PHASE_1_REPORT.md). Earlier runs and external limitations are recorded there; physical devices/live providers remain unverified.
+
+## Latest baseline — 21 October 2026 (Africa/Lagos), Phase 0
+
+Full build/regression suite: **57 passed, 0 failed/cancelled/skipped**. Maths: **2,600** current curriculum instances covering **2,560 items and 40 lessons**, **392** preserved-bank checks, **900** log-table cells and **1,000** antilog cells. Read-only SQLite: **36 tables**, **3 migrations**, quick check `ok`, **0 FK violations**.
+
+Headless Chrome/Playwright inspected teacher, student and admin views with isolated fictional data: **10 final checks passed**, including 360px page widths and weekly editor width. No uncaught browser errors; initial `/api/me` 401 probes were recorded separately. Actual private backup restoration matched **33 data tables and 3 media files**, with sessions/recovery tokens excluded.
+
+See [full evidence, reproducible commands and limitations](docs/TEST_REPORT.md). These checks close Phase 0 only. Physical-device, live-service and production-hardening gates remain unverified. Historical entries below are retained for provenance.
+
 ## Executed commands
 
 - npm test: strict TypeScript/application build passed; 24 tests passed, zero failed/cancelled/skipped on the final run.

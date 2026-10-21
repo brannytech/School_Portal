@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
+for(const file of ['lesson-document.mjs','public/lesson-document.js','public/lesson-renderer.js']){const result=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(result.status!==0){console.error(result.stderr||result.error);process.exit(1);}}
 for(const file of ['server.mjs','store.mjs','database.mjs','lms-api.mjs','curriculum.mjs','storage.mjs','public/app.js','public/upgrade.js','public/profile.js','profile-api.mjs','student-api.mjs','student-access.mjs','public/students.js','admin-directory.mjs','public/admin-directory.js','monitoring.mjs','learning-releases.mjs','presence.mjs','public/monitoring.js','public/weekly-student.js','public/weekly-course.js','weekly-content.mjs']){
  const result=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(result.status!==0){console.error(result.stderr);process.exit(1);}
 }

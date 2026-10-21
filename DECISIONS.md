@@ -1,5 +1,29 @@
 # Architecture decisions for the expanded brief
 
+## Phase 1 implementation decisions — 21 October 2026
+
+- Phase 1 is complete; Phase 2 is next and not started. The one-phase-per-handoff instruction remains in force.
+- Share one pure ES-module document contract between Node and browser. Import the shared renderer before the final weekly `boot()`; keep the vanilla frontend and existing assets.
+- Store optional version-1 documents in existing lesson JSON; do not backfill legacy lessons on startup/read. Keep legacy source fields and full publication snapshots; verify originals before any future destructive migration.
+- Use separate optimistic draft revisions and canonical published fingerprints. Full-course publication also requires an explicit revision and archives replaced weeks. Old open editors fail with a conflict rather than overwriting newer data; reload them after update.
+- Preserve question metadata/stage and hidden legacy lesson quizzes in the weekly form. Hash revisions independently of SQL-reconstructed question order; document block order remains significant.
+- Render only validated declared blocks and escaped text. Student projection excludes unknown metadata/snapshots and assessment keys. Equation source stays textual until Phase 2 adds a separately evaluated safe rendering/input library.
+- Structured content is protected from edits through stale legacy text fields. Loading published content can discard blocks that exist only in an abandoned draft. Autosave and restore-as-new-draft UI belong to Phase 2.
+
+See [current report](docs/PHASE_1_REPORT.md). Earlier decisions follow as history.
+
+## Modernisation phase decisions — 21 October 2026
+
+- Complete one master-brief phase per handoff, per the user's clarification. Phase 0 is complete; Phase 1 is next and has not started. Report current stage, real checks, limitations and next stage on every handoff.
+- Use the actual source/tests as the baseline. Keep historical notes, but link the current audit and evidence so obsolete lesson counts are not mistaken for current behaviour.
+- Preserve the existing lightweight frontend, backend, school assets and academic/assessment records. Phase 0 changes only audit tooling/documentation and ignores private snapshots.
+- Plan an additive versioned document in existing lesson JSON for Phase 1, with lossless legacy fields and explicit conversion snapshots; avoid destructive eager migration. This is a design proposal to validate during Phase 1, not a completed schema change.
+- Reuse the final weekly lesson renderer path and existing release/authorisation checks. Shared student/preview rendering and complete server validation are required before a visual studio is considered complete.
+- Do not select or install editor, equation or graph dependencies in the audit phase. Check current official compatibility, accessibility, security and licensing at the relevant implementation phase.
+- Private snapshot records/media remain outside Git; the real baseline backup was restored into a new ignored test directory and compared without printing private records.
+
+See [audit](docs/CURRENT_SYSTEM_AUDIT.md), [plan](docs/IMPLEMENTATION_PLAN.md) and [risk register](docs/RISK_REGISTER.md). Older decisions follow.
+
 These supersede the first local-edition decisions.
 
 1. Preserve the existing working client and HTTP backend rather than replacing the product with a framework scaffold. The codebase remains lightweight HTML/CSS/JavaScript plus Node; new domain logic is strict TypeScript. A full React/Next.js migration is not represented as complete.

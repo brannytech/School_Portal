@@ -16,7 +16,7 @@ test('Weekly templates, end-of-topic activities and controlled assignments',asyn
  const q=(id,a,b)=>({id,prompt:`Evaluate ${a} + ${b}.`,kind:'numeric',answer:String(a+b),explanation:`Add ${a} and ${b} to get ${a+b}.`});
  const week={id:9,title:'Addition and checking',subtitle:'A weekly teaching fixture',reflectionPrompt:'What helped you check your sums?',lessons:[{id:'9-first',title:'Adding small numbers',objectives:['Add and check.'],explain:'Combine both quantities, then check by counting.',realLife:'Counting items in a basket.',summary:['Check your total.'],videoUrl:'https://www.youtube.com/watch?v=dQw4w9WgXcQ',questions:[q('a',2,3),q('b',4,5)]},{id:'9-second',title:'Checking the total',explain:'Reverse the order to check the same total.',questions:[q('c',3,2)]}],quiz:[q('weekly-a',6,2),q('weekly-b',7,1)]};
  const task=(title,status)=>({title,instructions:'Show each step of your working.',due:'2030-11-01T17:00:00+01:00',workDate:'2030-10-30',max:10,status});
- let teacher,student,admin,assignment,publishedRevision;
+ let teacher,student,admin,assignment,publishedRevision,draftRevision;
  try{
   await start();teacher=await login('teacher');student=await login('student');admin=await login('admin');
   await t.test('Drafts are private and cannot replace live content',async()=>{
@@ -24,13 +24,13 @@ test('Weekly templates, end-of-topic activities and controlled assignments',asyn
    assert.equal((await req('weekly-template?week=9&class=SS2',null,teacher)).status,403);
    assert.equal((await req('weekly-template',{week,publish:true,assignments:[]},student)).status,403);
    assert.equal((await req('weekly-template',{week:{...week,title:'Private draft',lessons:[{title:''}]},publish:false},teacher)).status,200);
-   assert((await req('weekly-template?week=9',null,teacher)).value.draft);
+   const info=(await req('weekly-template?week=9',null,teacher)).value;assert(info.draft);draftRevision=info.draftRevision;
    assert(!(await req('state',null,student)).value.weeks.some(w=>w.id===9));
   });
   await t.test('Publish only the selected week, embed valid videos and withhold answer keys',async()=>{
    const before=(await req('course',null,teacher)).value;
-   const invalid=structuredClone(week);invalid.lessons[0].videoUrl='https://evil.example/video';assert.equal((await req('weekly-template',{week:invalid,publish:true,assignments:[]},teacher)).status,400);
-   assert.equal((await req('weekly-template',{week,publish:true,assignments:[task('First task','PUBLISHED'),task('Later task','LOCKED'),task('Private task','DRAFT')]},teacher)).status,200);
+   const invalid=structuredClone(week);invalid.lessons[0].videoUrl='https://evil.example/video';assert.equal((await req('weekly-template',{week:invalid,publish:true,draftRevision,assignments:[]},teacher)).status,400);
+   assert.equal((await req('weekly-template',{week,publish:true,draftRevision,assignments:[task('First task','PUBLISHED'),task('Later task','LOCKED'),task('Private task','DRAFT')]},teacher)).status,200);
    const after=(await req('course',null,teacher)).value;assert.deepEqual(after.filter(w=>w.id!==9),before);
    const state=(await req('state',null,student)).value,w=state.weeks.find(w=>w.id===9);assert.equal(w.closingAvailable,true);assert.equal(w.quizCount,2);assert(!JSON.stringify(w).includes('weekly-a'));assert.deepEqual(w.lessons.map(l=>l.title),week.lessons.map(l=>l.title));
    const lesson=(await req('lesson/9-first',null,student)).value;assert.equal(lesson.videoUrl,week.lessons[0].videoUrl);assert(!('answer' in lesson.questions[0]));assert.deepEqual(lesson.quiz,[]);

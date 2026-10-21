@@ -17,6 +17,7 @@ import {durableSessions} from './database.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
 import {checkAnswer,gradeAssessment,masteryBand,calculate} from './dist/domain.js';
 import {summariseResults} from './dist/results.js';
+import {studentLesson,contentRevision,mergeWeekContent,validateWeekDocuments} from './lesson-document.mjs';
 const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
 const sessions=durableSessions(sql),rates=new Map(),uploadTokens=new Map(),secret=db.appSecret;
 const demo=process.env.NODE_ENV!=='production'&&process.env.DEMO_MODE==='true';
@@ -99,7 +100,7 @@ async function handle(req,res){
    questions:locked?[]:db.questions.filter(v=>fits(v)&&(u.role!=='STUDENT'||!v.hidden&&releaseState(c,s,t,v.lesson,scopeKey).available)).map(q=>u.role==='STUDENT'?((({reports,...v})=>v)(q)):q),resources:locked?[]:db.resources.filter(fits),announcements:locked?[]:db.announcements.filter(fits),notifications:db.notifications.filter(n=>n.recipient===u.id).slice(-30).reverse(),assessments:locked?[]:db.assessmentAttempts.filter(v=>fits(v)&&mine(v)).map(({questions,answers,...v})=>v),practiceAttempts:locked?[]:db.practiceAttempts.filter(v=>fits(v)&&mine(v)),
    students:u.role==='ADMIN'?db.users.filter(v=>v.role==='STUDENT').map(safeUser):u.role==='TEACHER'?db.users.filter(v=>v.role==='STUDENT'&&classFor(v)===c).map(safeUser):[],teachers:u.role==='ADMIN'?db.users.filter(v=>v.role==='TEACHER').map(safeUser):[],termLocks:db.termLocks.filter(k=>u.role==='ADMIN'||k.startsWith(academicSession()+'|'+c+':'+s+':')),audit:u.role==='ADMIN'?db.audit.slice(-30).reverse():[]});return;
  }
- if(endpoint.startsWith('lesson/')&&method==='GET'){const id=endpoint.split('/')[1],week=lessonAccess(u,c,s,t,id),lesson=week.lessons.find(v=>v.id===id);if(!lesson)fail(404,'Lesson not found.');if(u.role==='STUDENT'&&!db.progress.some(p=>belongs(p)&&p.student===u.id&&p.lesson===id&&p.class===c&&p.subject===s&&p.term===t)){db.progress.push({id:randomUUID(),sessionId:academicSession(),student:u.id,lesson:id,class:c,subject:s,term:t,answers:{},accuracy:0,practiceScore:0,reflectionDone:false,started:new Date().toISOString()});await save();}const strip=q=>Object.fromEntries(['id','prompt','kind','options','difficulty','hint','stage','objective','variables','tolerance'].filter(k=>q[k]!==undefined).map(k=>[k,q[k]]));json({...lesson,example:lesson.example,questions:lesson.questions.map(strip),quiz:[],questionCounts:{total:lesson.questions.length,quiz:lesson.questions.filter(q=>q.stage==='quiz').length,mastery:week.quiz.length}});return;}
+ if(endpoint.startsWith('lesson/')&&method==='GET'){const id=endpoint.split('/')[1],week=lessonAccess(u,c,s,t,id),lesson=week.lessons.find(v=>v.id===id);if(!lesson)fail(404,'Lesson not found.');if(u.role==='STUDENT'&&!db.progress.some(p=>belongs(p)&&p.student===u.id&&p.lesson===id&&p.class===c&&p.subject===s&&p.term===t)){db.progress.push({id:randomUUID(),sessionId:academicSession(),student:u.id,lesson:id,class:c,subject:s,term:t,answers:{},accuracy:0,practiceScore:0,reflectionDone:false,started:new Date().toISOString()});await save();}json({...studentLesson(lesson),quiz:[],questionCounts:{total:lesson.questions.length,quiz:lesson.questions.filter(q=>q.stage==='quiz').length,mastery:week.quiz.length}});return;}
  if(endpoint==='practice'&&method==='POST'){
   const week=lessonAccess(u,c,s,t,b.lesson),lesson=week.lessons.find(v=>v.id===b.lesson);if(!lesson)fail(404,'Lesson not found.');const q=lesson.questions.find(v=>v.id===b.question);if(!q)fail(404,'Question not found.');if(q.stage==='quiz')fail(403,'Quiz answers are available only after submitting an assessment.');
   const correct=checkAnswer(q,b.answer);db.practiceAttempts.push({id:randomUUID(),sessionId:academicSession(),class:c,subject:s,term:t,student:u.id,lesson:b.lesson,question:q.id,response:text(b.answer,200),correct,at:new Date().toISOString(),activeSeconds:Math.max(0,Math.min(300,Number(b.activeSeconds)||0))});
@@ -132,13 +133,27 @@ async function handle(req,res){
  // Every management mutation is checked here before any record is changed.
  if(u.role==='STUDENT')fail(403,'Teacher or administrator access required.');
  scope(u,c,s);
- if(endpoint==='course'&&method==='GET'){json(course(c,s,t));return;}
+ if(endpoint==='course'&&method==='GET'){const weeks=course(c,s,t);res.setHeader('X-Content-Revision',contentRevision(weeks));json(weeks);return;}
  if(endpoint==='course'&&method==='POST'){
   const input=b.weeks;if(!Array.isArray(input)||input.length>20)fail(400,'Provide an array of up to 20 weeks.');
   const ids=new Set();
   const validQuestion=q=>q&&typeof q.id==='string'&&typeof q.prompt==='string'&&['string','number'].includes(typeof q.answer)&&typeof q.explanation==='string'&&['numeric','choice','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind)&&(q.kind!=='choice'||Array.isArray(q.options)&&q.options.map(String).includes(String(q.answer)));
-  for(const w of input){if(!Number.isInteger(w.id)||w.id<1||w.id>52||ids.has(w.id)||typeof w.title!=='string'||!Array.isArray(w.lessons)||w.lessons.length<1||w.lessons.length>7||!Array.isArray(w.quiz)||w.quiz.length<10||!w.quiz.every(validQuestion))fail(400,'Each week needs a unique number, a title, 1–7 lessons and at least 10 valid quiz questions.');ids.add(w.id);const lessonIds=new Set();for(const l of w.lessons){if(typeof l.id!=='string'||!l.id.startsWith(w.id+'-')||lessonIds.has(l.id)||!l.title||!Array.isArray(l.objectives)||!l.explain||!l.realLife||!Array.isArray(l.summary)||!validQuestion(l.example)||!Array.isArray(l.questions)||l.questions.length<12||!l.questions.every(validQuestion))fail(400,'Each lesson needs its week-prefixed ID, title, objectives, explanation, real-life example, summary, worked example and at least 12 valid questions.');lessonIds.add(l.id);const questionIds=l.questions.map(q=>q.id);if(new Set(questionIds).size!==questionIds.length)fail(400,'Question IDs must be unique within a lesson.');}}
-  db.courses??={};db.courses[scopeKey(c,s,t)]=input;audit(u,`Published ${input.length} content weeks for ${c}:${s}:${t}`);await save();json({ok:true});return;
+  for(const w of input){
+   validateWeekDocuments(w);
+   if(!Number.isInteger(w.id)||w.id<1||w.id>52||ids.has(w.id)||typeof w.title!=='string'||w.lessons.length<1||w.lessons.length>7||!Array.isArray(w.quiz)||w.quiz.length<10||!w.quiz.every(validQuestion))fail(400,'Each week needs a unique number, a title, 1–7 lessons and at least 10 valid quiz questions.');
+   ids.add(w.id);const lessonIds=new Set();
+   for(const l of w.lessons){
+    const contentValid=l.document?l.document.blocks.length>0:Array.isArray(l.objectives)&&l.explain&&l.realLife&&Array.isArray(l.summary)&&validQuestion(l.example);
+    if(typeof l.id!=='string'||!l.id.startsWith(w.id+'-')||lessonIds.has(l.id)||!l.title||!contentValid||!Array.isArray(l.questions)||l.questions.length<12||!l.questions.every(validQuestion))fail(400,'Each lesson needs its week-prefixed ID, title, valid teaching content and at least 12 valid questions.');
+    lessonIds.add(l.id);const questionIds=l.questions.map(q=>q.id);if(new Set(questionIds).size!==questionIds.length)fail(400,'Question IDs must be unique within a lesson.');
+   }
+   if(new Set(w.quiz.map(q=>q.id)).size!==w.quiz.length)fail(400,'Weekly quiz question IDs must be unique.');
+  }
+  const previous=course(c,s,t);
+  if(b.revision!==contentRevision(previous))fail(409,'This course was changed or its revision is missing. Reopen the course before publishing.');
+  const prepared=input.map(w=>{validateWeekDocuments(w);const merged=mergeWeekContent(w,previous.find(old=>old.id===w.id));validateWeekDocuments(merged);return {...merged,updatedAt:new Date().toISOString(),publicationId:randomUUID()};});
+  db.weekVersions??=[];for(const old of previous)db.weekVersions.push({id:randomUUID(),sessionId:academicSession(),class:c,subject:s,term:t,week:old.id,content:structuredClone(old),teacher:u.id,created:new Date().toISOString()});
+  db.courses??={};db.courses[scopeKey(c,s,t)]=prepared;audit(u,`Published ${input.length} content weeks for ${c}:${s}:${t}`);await save();json({ok:true,revision:contentRevision(course(c,s,t))});return;
  }
  if(endpoint==='unlock'&&method==='POST'){await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);if(!course(c,s,t).some(w=>w.id===Number(b.week)))fail(400,'Invalid week.');const key=scopeKey(c,s,t),set=new Set(db.unlocks[key]||[]);if(b.unlocked)set.add(Number(b.week));else set.delete(Number(b.week));db.unlocks[key]=[...set];audit(u,`${b.unlocked?'Unlock':'Lock'} week ${b.week}, ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({ok:true});return;}
  if(endpoint==='term-lock'&&method==='POST'){if(u.role!=='ADMIN')fail(403,'Admin access required.');const key=scopeKey(c,s,t);db.termLocks=db.termLocks.filter(v=>v!==key);if(b.locked)db.termLocks.push(key);audit(u,`${b.locked?'Lock':'Open'} term ${key}`);await save();json({ok:true});return;}

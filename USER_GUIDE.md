@@ -1,5 +1,15 @@
 # Using Olawale’s Lab
 
+## Lesson content update — 21 October 2026
+
+Teachers: use **Teaching workspace → Open weekly lesson template**, or **My learning → Design this week**. Save a private draft, reopen it, then publish when ready. Keep lesson/question IDs stable. The editor preserves existing lesson metadata and hidden legacy quiz items.
+
+If another window or teacher saves newer content, saving shows a conflict. Reopen the week and review the newer version before reapplying your changes. **Load published version** discards your unsaved screen edits and starts from the publication; private drafts remain separate until you save or publish. Reload older open browser tabs after this update so they use the new revision checks.
+
+Lessons can now contain structured content. Its text is read-only in the existing form to protect it; lesson details and practice questions are still editable. Students see supported blocks in the usual released lesson. The visual Teacher Content Studio and equation editor are the next stage; equation blocks currently show mathematical source text. Existing learning, assignment, quiz/reflection and progress workflows continue.
+
+See [current scope and limitations](docs/KNOWN_LIMITATIONS.md). Earlier guide sections describe existing workflows; the current weekly editor is the primary teaching interface.
+
 ## Forgotten password and recovery tokens
 
 1. On the sign-in page the person chooses **Forgot your password?** and enters their school email. The page always shows the same message, so it never reveals whether an email has an account.

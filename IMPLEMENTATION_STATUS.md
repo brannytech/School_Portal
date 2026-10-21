@@ -1,5 +1,9 @@
 # Status against the expanded LMS brief
 
+**Current: Phase 1 COMPLETE; Phase 2 Teacher Content Studio NOT STARTED (21 October 2026).** Validated versioned blocks, legacy adaptation/preservation, shared rendering and revision conflict checks are implemented. Full build/tests: **70 pass**; maths, browser workflows, mobile widths and structured backup/restore pass. No SQL migration or change to existing school data. Visual authoring, professional equations, autosave/history UI and later platform phases remain incomplete. See [current phase report](docs/PHASE_1_REPORT.md) and [limitations](docs/KNOWN_LIMITATIONS.md). The older stage entries below are retained as history.
+
+**Current stage, 21 October 2026: Phase 0 audit COMPLETE; Phase 1 structured lesson foundation NOT STARTED.** See [current source-backed audit](docs/CURRENT_SYSTEM_AUDIT.md), [phase plan](docs/IMPLEMENTATION_PLAN.md) and [57-test baseline report](docs/TEST_REPORT.md). The historical matrix below is retained; the current database has three applied SQL migrations. No visual studio, parent portal or multi-school feature has been implemented in this stage.
+
 Updated 17 October 2026, Africa/Lagos. This is a functioning expanded MVP, not a claim that every production acceptance criterion has passed.
 
 | Area | Implemented | Verification / remaining scope |

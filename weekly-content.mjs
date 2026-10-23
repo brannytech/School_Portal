@@ -3,6 +3,8 @@ import {db,save} from './store.mjs';
 import {academicSession} from './context.mjs';
 import {rememberLearningReleases} from './learning-releases.mjs';
 import {contentRevision,mergeWeekContent,validateWeekDocuments,assignDraftIds} from './lesson-document.mjs';
+import {validateLessonDocument} from './public/lesson-document.js';
+import {validateDocumentMath} from './math-content.mjs';
 
 const clean=(v,n=15000)=>String(v??'').trim().slice(0,n);
 export function youtubeId(value){
@@ -59,6 +61,32 @@ export async function weeklyContentApi(x){
  const {endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}=x;
  const ctx={sessionId:academicSession(),class:c,subject:s,term:t},fits=v=>v.sessionId===ctx.sessionId&&v.class===c&&v.subject===s&&v.term===t;
  const staff=()=>{if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Teacher access required.');scope(u,c,s);};
+ if(endpoint==='weekly-history'&&method==='GET'){
+  staff();const id=Number(url.searchParams.get('week')),version=url.searchParams.get('version');
+  if(!Number.isInteger(id)||id<1||id>52)fail(400,'Choose a valid week.');
+  const current=course(c,s,t).find(w=>w.id===id),versions=(db.weekVersions||[]).filter(v=>fits(v)&&v.week===id);
+  if(version){const record=version==='current'&&current?{id:'current',content:current}:versions.find(v=>v.id===version);if(!record)fail(404,'Version not found in this teaching scope.');json(record);return true;}
+  json({current:!!current,versions:[...versions].reverse().map(({id,created,teacher,content})=>({id,created,teacher:db.users.find(u=>u.id===teacher)?.name||'Teacher',title:content.title,lessons:content.lessons.length}))});return true;
+ }
+ if(endpoint==='weekly-restore'&&method==='POST'){
+  staff();const id=Number(b.week),key=scopeKey(c,s,t)+'|'+id,current=course(c,s,t).find(w=>w.id===id),draft=db.weekDrafts?.[key];
+  if(!Number.isInteger(id)||id<1||id>52)fail(400,'Choose a valid week.');
+  if((b.revision??null)!==contentRevision(current)||(b.draftRevision??null)!==(draft?.revision||draft?.savedAt||null))fail(409,'This week or draft changed. Reload before restoring.');
+  const content=b.version==='current'?current:(db.weekVersions||[]).find(v=>v.id===b.version&&fits(v)&&v.week===id)?.content;
+  if(!content)fail(404,'Version not found in this teaching scope.');
+  const week=assignDraftIds(validateWeekDocuments(structuredClone(content))),revision=randomUUID();
+  db.weekDrafts??={};db.weekDrafts[key]={week,revision,baseRevision:contentRevision(current),restoredFrom:b.version,savedBy:u.id,savedAt:new Date().toISOString(),assignments:db.assignments.filter(a=>fits(a)&&Number(a.week)===id)};
+  audit(u,`Restored weekly content ${id} as a new private draft`);await save();json({saved:true,published:false,draftRevision:revision});return true;
+ }
+ if(endpoint==='studio-templates'){
+  staff();if(method==='GET'){json((db.blockTemplates||[]).filter(v=>v.owner===u.id&&fits(v)));return true;}
+  if(method==='POST'){
+   const document=validateLessonDocument({schemaVersion:1,blocks:[b.block]});validateDocumentMath(document);
+   const name=clean(b.name,100);if(!name)fail(400,'Name this reusable block.');
+   if((db.blockTemplates||[]).filter(v=>v.owner===u.id).length>=50)fail(400,'You have reached the 50-template limit.');
+   const record={id:randomUUID(),...ctx,owner:u.id,name,block:document.blocks[0]};db.blockTemplates??=[];db.blockTemplates.push(record);await save();json(record);return true;
+  }
+ }
  if(endpoint==='weekly-template'&&method==='GET'){
   staff();const id=Number(url.searchParams.get('week'));const key=scopeKey(c,s,t)+'|'+id;const week=course(c,s,t).find(w=>w.id===id);
   const draft=db.weekDrafts?.[key]||null;
@@ -80,7 +108,7 @@ export async function weeklyContentApi(x){
   if(!Array.isArray(b.assignments)||b.assignments.length>30)fail(400,'Add up to 30 assignments.');
   const prepared=b.assignments.map(a=>{const previous=a.id?db.assignments.find(v=>v.id===a.id&&fits(v)&&Number(v.week)===week.id):null;if(a.id&&!previous)fail(400,'An assignment does not belong to this week.');return prepareAssignment({...a,week:week.id},ctx,u.id,fail,previous);});
   await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);
-  db.weekVersions??=[];if(existing)db.weekVersions.push({id:randomUUID(),...ctx,week:week.id,content:structuredClone(existing),teacher:u.id,created:new Date().toISOString()});
+  db.weekVersions??=[];const archive=content=>{if(content&&!db.weekVersions.some(v=>fits(v)&&v.week===week.id&&contentRevision(v.content)===contentRevision(content)))db.weekVersions.push({id:randomUUID(),...ctx,week:week.id,content:structuredClone(content),teacher:u.id,created:new Date().toISOString()});};archive(existing);archive(week);
   db.courses[key]=[...course(c,s,t).filter(w=>w.id!==week.id),week].sort((a,b)=>a.id-b.id);
   for(const lesson of week.lessons){db.releases=db.releases.filter(r=>!fits(r)||r.lesson!==lesson.id);db.releases.push({id:randomUUID(),...ctx,lesson:lesson.id,status:b.unlock===false?'LOCKED':'UNLOCKED',teacher:u.id,updated:new Date().toISOString()});}
   const opened=new Set(db.unlocks[key]||[]);if(b.unlock===false)opened.delete(week.id);else opened.add(week.id);db.unlocks[key]=[...opened];

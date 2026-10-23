@@ -1,5 +1,27 @@
 # Expanded LMS development progress
 
+## Word-style studio redesign — 23 October 2026
+
+The studio now has a compact File/Home/Insert/Questions/Review ribbon above a white document page. Setup and question controls open on demand; writing is the main view. Draft saves, preview, publication, visual equations, graphs, tables and private templates remain available. See the [redesign report](docs/STUDIO_RIBBON_REPORT.md) and [updated teacher guide](docs/TEACHER_CONTENT_STUDIO.md). This supersedes the four-step sidebar layout below; Phase 4 has not begun.
+
+## Studio usability follow-up — COMPLETE, 23 October 2026
+
+Four-step layout, inline item editing, persistent question sections, answer selectors, publication checklist and optional advanced graph controls are implemented. English, science and mathematics examples pass authoring, publication and student-view checks. Verification: **90 regression tests**, maths audits and **41 browser checks** (8 usability, 14 studio, 11 mathematics, 8 foundation). This was automated/task-based inspection, without an external nontechnical participant or physical phone. See [usability report](docs/STUDIO_USABILITY_REPORT.md). Phase 4 remains not started.
+
+## Current stage — Phase 3 COMPLETE, 23 October 2026 (Africa/Lagos)
+
+Interactive Mathematics and blank authoring pass the local gate: fifteen editable graph presets, coefficient sliders and updated equations, matrix/geometry foundations, seven toolkits and informal graph-construction feedback. Teachers can explicitly start a blank template with no content/questions, build their own lesson, add/delete questions and publish. Existing data paths, scope/revisions and official grading are preserved; no SQL migration.
+
+Verification: **87 regression tests**, maths audits, **11 Phase 3 browser checks**, **14 studio checks** and **8 foundation checks** pass. All authoring tests use fresh fictional databases; restart and backup/restore retain graph settings. See [Phase 3 report](docs/PHASE_3_REPORT.md) and [teacher instructions](docs/INTERACTIVE_MATHEMATICS.md). Physical Android and production/provider gates remain open. **Next: Phase 4 — Advanced question authoring, not started.** Earlier entries below are historical.
+
+## Current stage — Phase 2 COMPLETE, 23 October 2026 (Africa/Lagos)
+
+Teacher Content Studio passes its local gate: formatted blocks, visual inline/display equations, reusable private blocks, ordering/undo, shared responsive student preview, serial autosave, publication history and restore-as-draft. Existing scope, revision checks, lesson metadata and grading remain in use; no SQL migration. See [Phase 2 report](docs/PHASE_2_REPORT.md) for supported blocks and remaining authoring scope.
+
+Verification: **78 regression tests**, **14 studio browser checks**, **8 foundation browser checks** and all maths audits passed. All automated authoring used isolated fictional databases. Of 34 backed-up live tables compared, 31 matched; three operational tables changed while the live app was active. No academic-table reset was performed.
+
+**Next: Phase 3 — Interactive Mathematics, not started.** Add editable graph definitions, coefficient sliders and saved interactive configurations, with independent numerical and mobile checks. One phase is implemented per handoff. Entries below are historical.
+
 ## Current stage — Phase 1 COMPLETE, 21 October 2026 (Africa/Lagos)
 
 Structured lesson foundation now passes its local acceptance gate: versioned validated blocks, a non-destructive legacy adapter, shared student renderer, strict student projection, separate draft/published conflict tokens, stable IDs, metadata/hidden-question preservation and publication snapshots on both publishing routes. Existing SQLite JSON storage is reused; no SQL migration, bank replacement or grading change.

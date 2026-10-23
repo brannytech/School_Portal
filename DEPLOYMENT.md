@@ -2,6 +2,8 @@
 
 ## Tested local installation
 
+Phase 2 adds locally bundled editor/math dependencies. Always run `npm ci` and `npm run build` after pulling, then restart the server and refresh open tabs. Include generated `public/vendor/` in a deployment artifact even though it is ignored by Git. The build copies fonts, styles and dependency notices; students load mathematical display code when needed, while authoring dependencies load in the studio. No new SQL migration or CDN configuration is required. See [Phase 2 operations and limitations](docs/PHASE_2_REPORT.md).
+
 Node.js 22.11 or newer is required. The tested runtime is Node 22.11 with its SQLite flag enabled by the npm scripts. SQLite is experimental in that exact runtime; do not infer that this test certifies every later Node release.
 
 ```powershell

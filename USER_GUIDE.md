@@ -1,12 +1,24 @@
 # Using Olawale’s Lab
 
+## Current stage — Interactive Mathematics and blank templates, 23 October 2026
+
+Open **Teaching workspace → Open Content Studio**, select a week and choose **Start blank template**. Start with an empty subtopic and no content, practice or quiz questions. Add your own blocks and questions, preview, save and publish; Undo can reverse the blank replacement before closing. The current publication stays available until you publish the replacement. New subtopics also start empty. Existing publication requirements still apply.
+
+Insert **Interactive graph** for editable functions, charts and coefficient sliders, or **Mathematics toolkit** for matrices, geometry and other explorations. Student changes and graph practice feedback are local; official marks are unchanged. Follow the [blank-template and mathematics guide](docs/INTERACTIVE_MATHEMATICS.md). Phase 3 passes its local gate; Phase 4 remains next. Earlier guide entries below are historical.
+
+## Current stage — Teacher Content Studio, 23 October 2026
+
+Phase 2 is complete within its [reported scope](docs/PHASE_2_REPORT.md). As an assigned teacher or administrator, choose the academic session/class/subject/term, then **Teaching workspace → Open Content Studio**. Create or select a week/subtopic, edit blocks and formatted text, add visual equations, preview, save a private draft and publish. History can restore a publication as a new draft. See the [studio guide](docs/TEACHER_CONTENT_STUDIO.md) for controls, conflict recovery and memory-only offline editing.
+
+Students read released content through the usual learning page, including typeset equations. The legacy weekly form remains available; its structured-text fields stay protected. Earlier dated guide entries below describe previous phases. **Next: Phase 3 — Interactive Mathematics, not started.**
+
 ## Lesson content update — 21 October 2026
 
 Teachers: use **Teaching workspace → Open weekly lesson template**, or **My learning → Design this week**. Save a private draft, reopen it, then publish when ready. Keep lesson/question IDs stable. The editor preserves existing lesson metadata and hidden legacy quiz items.
 
 If another window or teacher saves newer content, saving shows a conflict. Reopen the week and review the newer version before reapplying your changes. **Load published version** discards your unsaved screen edits and starts from the publication; private drafts remain separate until you save or publish. Reload older open browser tabs after this update so they use the new revision checks.
 
-Lessons can now contain structured content. Its text is read-only in the existing form to protect it; lesson details and practice questions are still editable. Students see supported blocks in the usual released lesson. The visual Teacher Content Studio and equation editor are the next stage; equation blocks currently show mathematical source text. Existing learning, assignment, quiz/reflection and progress workflows continue.
+This historical Phase 1 entry introduced protected structured content in the legacy form. Phase 2 now supplies visual editing and typeset equations through Content Studio, as described above. Existing learning, assignment, quiz/reflection and progress workflows continue.
 
 See [current scope and limitations](docs/KNOWN_LIMITATIONS.md). Earlier guide sections describe existing workflows; the current weekly editor is the primary teaching interface.
 

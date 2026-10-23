@@ -1,6 +1,6 @@
 # Incremental implementation plan
 
-Updated 21 October 2026 (Africa/Lagos). **Phases 0 and 1 complete. Next: Phase 2 — Teacher Content Studio (not started).** Execute and report one phase at a time. Do not proceed through a failed gate or claim an external gate passed without evidence. [Phase 1 acceptance report](PHASE_1_REPORT.md) records the implemented files, exact test results and limitations.
+Updated 23 October 2026 (Africa/Lagos). **Phases 0-3 complete within documented scope. Next: Phase 4 - Advanced question authoring (not started).** Execute and report one phase at a time. [Phase 3 acceptance](PHASE_3_REPORT.md) records implemented mathematics/blank authoring, checks and limits; [its plan](PHASE_3_PLAN.md) is retained. Earlier plans below are historical.
 
 ## Phase 1 — structured lesson content foundation (completed)
 

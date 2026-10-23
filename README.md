@@ -21,6 +21,8 @@ See **Quick start for a real school** in [DEPLOYMENT.md](DEPLOYMENT.md): `npm ru
 
 ## This upgrade
 
+Current modernisation stage: **Phase 3 - Interactive Mathematics and blank templates complete within documented scope**. Teachers can start with zero content/questions, design their own lessons, and add editable graphs, sliders and mathematics toolkits. See the [teacher guide](docs/INTERACTIVE_MATHEMATICS.md) and [acceptance report](docs/PHASE_3_REPORT.md). **Next: Phase 4 - Advanced question authoring, not started.** After updating, run `npm run build`, restart the server and refresh. Local editor/math assets are generated under `public/vendor/`; no runtime CDN is needed.
+
 - Replaces JSON persistence with a real relational database and versioned migrations. SQLite runs locally; PostgreSQL is configurable for deployment. Existing local records are imported once and the original JSON file is retained.
 - Academic sessions, enrolment/promotion history, term archives and daily lesson publication/release rules.
 - Durable authentication, suspension, pending administrator-created students and single-use account recovery.

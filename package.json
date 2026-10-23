@@ -12,7 +12,7 @@
     "seed": "node --env-file-if-exists=.env --experimental-sqlite scripts/seed.mjs",
     "test": "node --experimental-sqlite --test tests/*.test.mjs",
     "verify-math": "node scripts/verify-math/index.mjs && node scripts/verify-math/curriculum.mjs",
-    "build": "tsc && node scripts/check-build.mjs",
+    "build": "tsc && node scripts/build-editor.mjs && node scripts/check-build.mjs",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
     "backup": "node --env-file-if-exists=.env --experimental-sqlite scripts/backup.mjs",
@@ -23,11 +23,20 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",
     "@aws-sdk/s3-request-presigner": "^3.1152.0",
+    "@tiptap/core": "^3.32.0",
+    "@tiptap/extension-subscript": "^3.32.0",
+    "@tiptap/extension-superscript": "^3.32.0",
+    "@tiptap/extension-text-align": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "katex": "0.18.2",
+    "mathlive": "^0.111.1",
     "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

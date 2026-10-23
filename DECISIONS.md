@@ -1,5 +1,14 @@
 # Architecture decisions for the expanded brief
 
+## Phase 2 implementation decisions — 23 October 2026
+
+- Phase 2 completes the documented studio gate; Phase 3 remains unstarted. The supported block list and remaining media/graph/assessment scope are explicit in [the report](docs/PHASE_2_REPORT.md).
+- Keep the vanilla frontend. Locally bundle TipTap for structured rich text, MathLive for visual input and KaTeX 0.18.2 for display/server parsing. Pin audited dependencies, copy package notices and lazy-load authoring code; no paid editor service or runtime CDN.
+- Store a bounded allowed JSON subset, not arbitrary teacher HTML. Reject unsafe nodes/links/math commands and independently parse equations on the server. Share student and preview rendering.
+- Reuse existing JSON storage, opaque draft/published revisions and single-process request serialisation. Queue autosaves, retain newer local edit generations and stop on conflicts. Offline unsaved edits stay in memory with warnings, avoiding private browser-storage drafts on shared devices.
+- Restore historical publications as new drafts; retain current publications and attempts. Reusable block templates are private to the author and academic scope. No SQL migration, school-data backfill or grading-policy change.
+- Final browser tests caught selection replacement on inline equation insertion; insert after selected text and verify text/format preservation across refresh. Earlier decisions below describe their dated phase.
+
 ## Phase 1 implementation decisions — 21 October 2026
 
 - Phase 1 is complete; Phase 2 is next and not started. The one-phase-per-handoff instruction remains in force.
@@ -59,6 +68,13 @@ These supersede the first local-edition decisions.
 
 ### Optional classroom notebook checking
 Per user request, notebook submissions are excluded entirely from student and staff progress displays and monitoring API responses, including home progress and weekly lesson indicators. Weekly work percentages continue to use reading, exercises, quizzes, topic tests, reflections and assignments only. My notes / Notes & review remains available as a separate optional workflow, with existing uploads and feedback preserved.
+
+### Phase 3: blank authoring and local interactive mathematics
+
+- Provide an explicit blank private template with one empty subtopic and no questions. Keep publication validation, current publication, weekly assignments and historical records intact; allow Undo and custom question deletion. New subtopics also start empty.
+- Reuse existing scoped document/draft/history/template storage. Share strict mathematics definitions between server and browser; never execute mathematical input as JavaScript.
+- Use small local SVG for bounded educational graphs/geometry; avoid a new external graph dependency. Store editable expressions and settings, and document sampling/feature-recognition limits. Re-evaluate established graph/geometry libraries for advanced constructions.
+- Keep graph-construction feedback local and informal. Calculator permissions and official graph-question grading belong to later assessment authoring.
 
 ### Weekly teaching structure and authoring
 - Render subtopics rather than fixed days. Practice follows each subtopic; one quiz and reflection close the weekly topic. Keep legacy assessment/reflection endpoints for older clients, but the current interface uses week-scoped activities. Historical mastery submissions count as the weekly quiz; historical reflections are capped at one per week.

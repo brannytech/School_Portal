@@ -1,6 +1,8 @@
 # Phase 0 baseline test report
 
-Current result after Phase 1: **70 tests passed**, maths verification passed, 8 new browser acceptance checks and 10 existing role/mobile checks passed. See [Phase 1 evidence](PHASE_1_REPORT.md) for current commands, screenshots, restore checks and limitations. The original Phase 0 report follows unchanged for provenance.
+Latest result after Phase 3 (23 October 2026): **87 regression tests**, maths audits, **11 interactive/blank-template**, **14 studio** and **8 foundation browser checks passed**. Fresh fictional blank authoring, custom questions, mathematical accuracy/domains, authorisation, saved configurations and restart/backup restoration are verified. [Phase 3 evidence](PHASE_3_REPORT.md) records exact reports, intermediate failures and remaining gates. Earlier results below are historical.
+
+Current result after Phase 2 (23 October 2026): **78 tests passed**, maths verification passed, **14 studio browser checks** and **8 foundation browser regression checks** passed. See [Phase 2 evidence](PHASE_2_REPORT.md) for report paths, recovery tests, dependency audit and limitations. The original Phase 0 report follows unchanged for provenance.
 
 Executed 21 October 2026 (Africa/Lagos), Node v22.11.0, installed dependencies from the current lockfile. No application feature code changed.
 

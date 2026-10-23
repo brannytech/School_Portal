@@ -2,6 +2,7 @@
 export {validateLessonDocument,legacyLessonToDocument,documentForLesson,studentLesson} from './public/lesson-document.js';
 import {validateLessonDocument} from './public/lesson-document.js';
 import {createHash,randomUUID} from 'node:crypto';
+import {validateDocumentMath} from './math-content.mjs';
 
 // SQL reconstructs object properties and question-bank order; those incidental orders
 // must not invalidate a saved draft after restart. Document block order stays significant.
@@ -38,7 +39,7 @@ export function validateWeekDocuments(week){
   if(!lesson||typeof lesson!=='object'||Array.isArray(lesson))fail('Each subtopic must be an object.');
   for(const key of ['objectives','summary','questions'])if(lesson[key]!==undefined&&(!Array.isArray(lesson[key])||lesson[key].length>100))fail('Subtopic '+key+' must be a list of at most 100 entries.');
   for(const q of [...(lesson.questions||[]),...(lesson.example?[lesson.example]:[])])if(!q||typeof q!=='object'||Array.isArray(q)||q.options!==undefined&&!Array.isArray(q.options))fail('Questions need an object with a valid options list.');
-  if(lesson.document!==undefined)lesson.document=validateLessonDocument(lesson.document);
+  if(lesson.document!==undefined){lesson.document=validateLessonDocument(lesson.document);validateDocumentMath(lesson.document);}
  }
  for(const q of week.quiz||[])if(!q||typeof q!=='object'||Array.isArray(q)||q.options!==undefined&&!Array.isArray(q.options))fail('Quiz questions need an object with a valid options list.');
  return week;

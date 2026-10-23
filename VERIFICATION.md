@@ -1,4 +1,22 @@
+# Word-style studio redesign — 23 October 2026
+
+Build/regression: **90 pass**. The redesigned ribbon has dedicated workflow coverage and updated history/offline, mathematics and varied-example browser suites. Current evidence is in the [redesign report](docs/STUDIO_RIBBON_REPORT.md). Earlier browser totals below describe the former layout.
+
+# Studio usability follow-up — 23 October 2026
+
+Build/regression: **90 pass**. Maths audits pass. Browser workflows: **8 usability + 14 studio + 11 mathematics + 8 foundation = 41 pass**. English, science and mathematics were authored and published using isolated fictional databases. See [report and evidence paths](docs/STUDIO_USABILITY_REPORT.md). Automated mobile viewport checks do not replace a physical-phone or nontechnical-participant trial.
+
 # Upgrade verification — 17 October 2026 (Africa/Lagos)
+
+## Latest — Phase 3, 23 October 2026 (Africa/Lagos)
+
+**87 regression tests passed**, including build; maths audits passed; **11 interactive/blank-template + 14 studio + 8 foundation browser checks passed**, with no uncaught page errors. Blank private drafts, teacher-authored questions, editable saved mathematics, student controls and 360px layouts are exercised on fresh fictional databases. Mathematical definitions survive restart and backup restoration. See [Phase 3 evidence, intermediate failures and remaining limits](docs/PHASE_3_REPORT.md). No new dependency audit or physical-device/provider certification is claimed. **Next: Phase 4, not started.** Older entries below are historical.
+
+## Latest — Phase 2, 23 October 2026 (Africa/Lagos)
+
+`npm test`: **78 passed**, 26 top-level tests, **0 failed/cancelled/skipped**, including TypeScript/bundle/syntax checks. Maths audits passed: 2,600 active curriculum instances, 392 preserved-bank checks, 900 log cells, 1,000 antilog cells. Browser: **14 studio checks + 8 foundation regression checks**, no uncaught page errors. New tests cover schema/math safety, staff scope/CSRF, private templates, history/restoration/conflicts and restart/backup recovery. `npm audit` reported **0 known vulnerabilities** in the installed graph.
+
+Evidence and failed/intermediate-run explanations: [Phase 2 report](docs/PHASE_2_REPORT.md). Real-data read-only comparison: 31 of 34 backed-up tables unchanged; three operational tables differed while the live app was active, academic tables matched and FK violations were zero. No physical-device/provider/full accessibility/load/security certification is claimed. **Next: Phase 3, not started.**
 
 ## Latest — Phase 1, 21 October 2026 (Africa/Lagos)
 

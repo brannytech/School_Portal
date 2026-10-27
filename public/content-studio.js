@@ -15,7 +15,7 @@ const newBlock=type=>({id:uid(),type,...({'rich-text':{content:richText('')},gra
 export async function openContentStudio({host,context,api,week=1,onPublished,renderWidget}){
  if(host.open)throw Error('Close the current editor before opening Content Studio.');
  if(!document.querySelector('link[data-studio-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/content-studio.css';link.dataset.studioStyle='true';document.head.append(link);}
- const {createRichEditor}=await import('/vendor/studio-editor.js');
+ const editorModule=await import('/vendor/studio-editor.js'),{createRichEditor}=editorModule;
  const s={week:null,lessonId:null,blockId:null,revision:null,draftRevision:null,assignments:[],dirty:false,generation:0,saving:null,conflict:false,disposed:false,editor:null,undo:[],undoIndex:-1,templates:[],status:'Loading lesson…',loadWeek:week,questionIndex:0,quizIndex:0,release:true,bankOpen:{practice:false,quiz:false}};
  const call=(route,data)=>data?api(route,{...context,...data}):api(route+(route.includes('?')?'&':'?')+new URLSearchParams(context));
  const current=()=>s.week?.lessons.find(l=>l.id===s.lessonId);
@@ -26,15 +26,40 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  function historyPoint(){const snapshot=JSON.stringify(s.week);if(s.undo[s.undoIndex]===snapshot)return;s.undo=s.undo.slice(0,s.undoIndex+1);s.undo.push(snapshot);if(s.undo.length>30)s.undo.shift();s.undoIndex=s.undo.length-1;}
  function changed(source='document'){s.lastEdit=source;s.dirty=true;s.generation++;status('Unsaved changes');updateReadiness();clearTimeout(s.autosave);clearTimeout(s.historyTimer);clearTimeout(s.previewTimer);s.previewTimer=setTimeout(()=>{if(s.disposed)return;const block=selected(),card=[...host.querySelectorAll('[data-block]')].find(el=>el.dataset.block===block?.id),preview=card?.querySelector('[data-block-preview]');if(block&&preview){preview.innerHTML='<summary>Student view of this item</summary>'+renderLessonDocument({schemaVersion:1,blocks:[block]},{renderWidget});hydrateLessonMath(preview);}},300);s.historyTimer=setTimeout(historyPoint,700);if(!s.conflict)s.autosave=setTimeout(()=>save(false),1300);}
  function mutate(fn){historyPoint();fn();changed();historyPoint();render();}
+ const blankText=block=>{if(block.type!=='rich-text')return false;let used=false;const walk=node=>{if(node.type==='inlineMath'||(node.type==='text'&&node.text?.trim()))used=true;node.content?.forEach(walk);};walk(block.content||{});return !used;};
+ // Focus synchronously (see focusNow): keystrokes typed straight after an insertion must land in the new line.
+ function focusEditor(position=null){editorModule.focusNow(s.editor,position);}
  function insertLessonBlock(block){
   const list=blocks(),index=list.findIndex(b=>b.id===s.blockId),editor=selected()?.type==='rich-text'?s.editor:null;
-  let replacement=[block];
-  if(editor&&block.type!=='rich-text'){
-   const {doc,selection}=editor.state,before=doc.cut(0,selection.from),after=doc.cut(selection.to);
-   const hasContent=node=>{let content=!!node.textContent.trim();node.descendants(child=>{if(child.type.name==='inlineMath')content=true;});return content;};
-   replacement=[...(hasContent(before)?[{...selected(),content:before.toJSON()}]:[]),block,...(hasContent(after)?[{id:uid(),type:'rich-text',content:after.toJSON()}]:[])];
+  mutate(()=>{
+   let at=index<0?list.length:index+1,remove=0,items=[block];
+   if(editor&&block.type!=='rich-text'){
+    const {doc,selection}=editor.state,before=doc.cut(0,selection.from),after=doc.cut(selection.to);
+    const hasContent=node=>{let content=!!node.textContent.trim();node.descendants(child=>{if(child.type.name==='inlineMath')content=true;});return content;};
+    // structuredClone: ProseMirror attribute objects have no prototype, which the lesson validator rejects.
+    items=[...(hasContent(before)?[{...selected(),content:structuredClone(before.toJSON())}]:[]),block,...(hasContent(after)?[{id:uid(),type:'rich-text',content:structuredClone(after.toJSON())}]:[])];at=index;remove=1;
+   }
+   list.splice(at,remove,...items);
+   // Every inserted item is followed by a writable line, created in the same undo step.
+   if(block.type!=='rich-text'){const position=list.indexOf(block);if(list[position+1]?.type!=='rich-text')list.splice(position+1,0,{id:uid(),type:'rich-text',content:richText('')});}
+   s.blockId=block.id;
+  });
+  afterInsert(block);
+ }
+ // Decide where the caret goes after an insertion: into the item if it needs input, otherwise onto the next line.
+ function afterInsert(block){
+  if(block.type==='rich-text'){switchTab('home');focusEditor();return;}
+  if(block.type==='equation'){openEquation({kind:'block',id:block.id,latex:block.latex,fresh:true});return;}
+  if(block.type==='widget'){continueWriting(block.id);return;}
+  if(['graph','math-tool'].includes(block.type)){
+   // The graph/toolkit controls mount asynchronously: hold focus on the item, then move it to the first control unless the teacher has already moved on.
+   const card=host.querySelector('.studio-block.selected');card?.focus();
+   (async()=>{for(let i=0;i<60&&!s.disposed;i++){const control=host.querySelector('.studio-block.selected [data-math-author] input, .studio-block.selected [data-math-author] select');if(control){if(document.activeElement===card||document.activeElement===document.body)control.focus();return;}await new Promise(resolve=>setTimeout(resolve,50));}})();
+   return;
   }
-  mutate(()=>{list.splice(index<0?list.length:index,editor&&block.type!=='rich-text'?1:0,...replacement);if(index>=0&&(!editor||block.type==='rich-text')){list.splice(index,1);list.splice(index+1,0,replacement[0]);}s.blockId=block.id;});
+  const field=host.querySelector('[data-item-editor] [data-path]');
+  if(field){field.focus();field.scrollIntoView({block:'center'});return;}
+  continueWriting(block.id);
  }
  function continueWriting(id=s.blockId){
   if(!current())return;
@@ -42,7 +67,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   s.tab='home';
   if(next?.type==='rich-text'){s.blockId=next.id;render();}
   else mutate(()=>{const block=newBlock('rich-text');list.splice(index<0?list.length:index+1,0,block);s.blockId=block.id;});
-  s.editor?.commands.focus('start');host.querySelector('.studio-rich-editor')?.scrollIntoView({block:'nearest'});
+  focusEditor('start');host.querySelector('.studio-rich-editor')?.scrollIntoView({block:'nearest'});
  }
  async function save(publish=false){
   while(s.saving)await s.saving;if(s.disposed)return false;if(s.conflict){status('A newer edit exists. Reload latest before saving. Your changes remain in this editor.');return false;}
@@ -50,6 +75,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   clearTimeout(s.autosave);const generation=s.generation,payload=structuredClone(s.week);status(publish?'Validating and publishing…':'Saving private draft…');
   const run=async()=>{
    try{
+    if(publish)for(const lesson of payload.lessons){const list=lesson.document?.blocks;if(list?.some(block=>!blankText(block)))lesson.document.blocks=list.filter(block=>!blankText(block));}
     for(const lesson of payload.lessons)if(lesson.document)validateLessonDocument(lesson.document);
     const result=await call('weekly-template',{week:payload,assignments:s.assignments,revision:s.revision,draftRevision:s.draftRevision,publish,unlock:s.release});
     s.revision=result.revision;s.draftRevision=result.draftRevision;
@@ -63,8 +89,8 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  async function load(id,discard=false){
   if(!Number.isInteger(Number(id))||Number(id)<1||Number(id)>52)throw Error('Choose a learning week from 1 to 52.');
   if(!discard&&s.dirty&&!await save())return;
-  const request=s.loadRequest=(s.loadRequest||0)+1,data=await call('weekly-template?week='+Number(id));if(s.disposed||request!==s.loadRequest)return;destroyEditor();s.week=structuredClone(data.draft?.week||data.published||{id:Number(id),title:'',lessons:[],quiz:[],reflectionPrompt:'What did you learn and what needs more practice?'});
-  s.revision=data.draft&&Object.hasOwn(data.draft,'baseRevision')?data.draft.baseRevision:data.revision;s.draftRevision=data.draftRevision;s.assignments=structuredClone(data.draft?.assignments||data.assignments||[]);s.lessonId=s.week.lessons[0]?.id||null;s.blockId=null;s.dirty=false;s.conflict=false;s.questionIndex=0;s.quizIndex=0;s.loadWeek=Number(id);s.undo=[];s.undoIndex=-1;historyPoint();status(data.draft?'Private draft loaded':'Published content loaded');s.templates=await call('studio-templates');render();
+  const request=s.loadRequest=(s.loadRequest||0)+1;status('Loading week '+Number(id)+'…');host.setAttribute('aria-busy','true');const data=await call('weekly-template?week='+Number(id)),templates=await call('studio-templates');if(s.disposed||request!==s.loadRequest)return;destroyEditor();s.week=structuredClone(data.draft?.week||data.published||{id:Number(id),title:'',lessons:[],quiz:[],reflectionPrompt:'What did you learn and what needs more practice?'});
+  s.revision=data.draft&&Object.hasOwn(data.draft,'baseRevision')?data.draft.baseRevision:data.revision;s.draftRevision=data.draftRevision;s.assignments=structuredClone(data.draft?.assignments||data.assignments||[]);s.lessonId=s.week.lessons[0]?.id||null;s.blockId=null;s.dirty=false;s.conflict=false;s.questionIndex=0;s.quizIndex=0;s.loadWeek=Number(id);s.undo=[];s.undoIndex=-1;historyPoint();s.templates=templates;s.status=data.draft?'Private draft loaded':'Published content loaded';host.removeAttribute('aria-busy');render();
  }
  function defaultQuestion(){return {id:uid(),prompt:'',kind:'numeric',answer:'',explanation:'',stage:'practice'};}
  function blankLesson(){return {id:s.week.id+'-'+uid(),title:'',minutes:20,explain:'',objectives:[],summary:[],document:{schemaVersion:1,blocks:[]},questions:[]};}
@@ -90,7 +116,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   if(block.type==='widget')body='<p>The existing interactive tool follows this lesson’s class, subject, term and topic.</p>';
   return body+`<details class="gap"><summary>Reuse this block</summary><label>Template name<input data-template-name maxlength="100"></label>${button('save-template','Save private template')}</details>`;
  }
- function toolbar(){return `<div class="studio-toolbar" role="toolbar" aria-label="Text formatting"><div class="studio-ribbon-group"><div class="studio-ribbon-tools"><label class="sr-only" for="studio-heading">Text style</label><select id="studio-heading"><option value="0">Normal text</option>${[1,2,3,4].map(v=>`<option value="${v}">Heading ${v}</option>`).join('')}</select>${[['bold','<b>B</b>','Bold'],['italic','<i>I</i>','Italic'],['underline','<u>U</u>','Underline'],['subscript','x₂','Subscript'],['superscript','x²','Superscript']].map(([action,label,title])=>button('text-'+action,label,`aria-label="${title}" title="${title}"`)).join('')}</div><span>Text</span></div><div class="studio-ribbon-group"><div class="studio-ribbon-tools">${button('text-bullet','• List','aria-label="Bullets"')}${button('text-ordered','1. List','aria-label="Numbered list"')}<label class="sr-only" for="studio-align">Text alignment</label><select id="studio-align">${['left','center','right','justify'].map(v=>`<option>${v}</option>`).join('')}</select>${button('text-quote','Quote')}</div><span>Paragraph</span></div></div>`;}
+ function toolbar(){return `<div class="studio-toolbar" role="toolbar" aria-label="Text formatting"><div class="studio-ribbon-group"><div class="studio-ribbon-tools"><label class="sr-only" for="studio-heading">Text style</label><select id="studio-heading"><option value="0">Normal text</option>${[1,2,3,4].map(v=>`<option value="${v}">Heading ${v}</option>`).join('')}</select>${[['bold','<b>B</b>','Bold'],['italic','<i>I</i>','Italic'],['underline','<u>U</u>','Underline'],['subscript','x₂','x₂ subscript'],['superscript','x²','x² superscript']].map(([action,label,title])=>button('text-'+action,label,`aria-label="${title}" title="${title}"`)).join('')}</div><span>Text</span></div><div class="studio-ribbon-group"><div class="studio-ribbon-tools">${button('text-bullet','• Bullet list')}${button('text-ordered','1. Numbered list')}<label class="sr-only" for="studio-align">Text alignment</label><select id="studio-align">${['left','center','right','justify'].map(v=>`<option>${v}</option>`).join('')}</select>${button('text-quote','Quote')}</div><span>Paragraph</span></div></div>`;}
  function switchTab(tab){
   s.tab=tab;
   host.querySelectorAll('[data-ribbon-tab]').forEach(el=>{const active=el.dataset.ribbonTab===tab;el.setAttribute('aria-selected',String(active));el.tabIndex=active?0:-1;});
@@ -140,9 +166,9 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   const latex=target.latex??selected()?.latex??'';
   if(target.kind==='inline'&&target.position===undefined)target.insertionPosition=Math.min(target.editor.state.selection.to,target.editor.state.doc.content.size-1);
   panel.innerHTML=`<div class="studio-actions"><h3>Insert mathematics</h3>${button('hide-panel','Close equation editor')}</div><div class="studio-actions">${[['fraction','Fraction'],['power','Power'],['root','Root'],['pi','π'],['theta','θ'],['sum','Σ'],['integral','Integral'],['le','≤'],['ge','≥'],['pm','±'],['log','Log'],['trig','Trig']].map(([key,label])=>button('symbol',label,`data-symbol="${key}"`)).join('')}</div><label>Editing mode<select data-math-mode><option value="visual">Visual editor</option><option value="source">LaTeX source</option></select></label><div data-visual-math><p role="status">Loading visual equation editor…</p></div><label data-source-math hidden>LaTeX<textarea data-latex>${esc(latex)}</textarea></label><details><summary>Fraction / matrix templates</summary><div class="studio-actions"><label>Numerator<input data-numerator value="2x+3"></label><label>Denominator<input data-denominator value="x-1"></label>${button('fraction-template','Use fraction')}</div><div class="studio-actions"><label>Matrix rows<input data-matrix-rows type="number" min="1" max="6" value="2"></label><label>Matrix columns<input data-matrix-columns type="number" min="1" max="6" value="2"></label>${button('matrix-resize','Resize matrix')}</div><div data-matrix-grid></div>${button('matrix-template','Use matrix')}</details><div data-equation-preview class="studio-equation-preview"></div><p data-equation-error class="error" role="alert"></p><div class="studio-actions">${button('apply-equation','Insert / update equation','class="primary"')}${button('keyboard','Math keyboard')}</div>`;
-  s.equationLatex=latex;const setLatex=value=>{s.equationLatex=value;const source=panel.querySelector('[data-latex]');if(source)source.value=value;showEquationPreview();};
+  s.equationLatex=latex;const setLatex=value=>{if(panel.querySelector('[data-math-mode]')?.value==='source')return;s.equationLatex=value;const source=panel.querySelector('[data-latex]');if(source)source.value=value;showEquationPreview();};
   drawMatrix();
-  try{const module=await import('/vendor/math-input.js');if(s.equationTarget!==target||!panel.isConnected)return;s.mathModule=module;s.mathField=module.makeMathField(s.equationLatex,setLatex);panel.querySelector('[data-visual-math]').replaceChildren(s.mathField);}catch{panel.querySelector('[data-visual-math]').textContent='Visual input could not load. Reconnect, or use LaTeX source.';}
+  try{const module=await import('/vendor/math-input.js');if(s.equationTarget!==target||!panel.isConnected)return;s.mathModule=module;s.mathField=module.makeMathField(s.equationLatex,setLatex);panel.querySelector('[data-visual-math]').replaceChildren(s.mathField);if(target.fresh||target.kind==='block')s.mathField.focus();}catch{panel.querySelector('[data-visual-math]').textContent='Visual input could not load. Reconnect, or use LaTeX source.';}
   await showEquationPreview();panel.scrollIntoView({block:'start'});
  }
  function drawMatrix(){const panel=host.querySelector('[data-studio-panel]'),previous=new Map([...panel.querySelectorAll('[data-matrix-cell]')].map(cell=>[cell.dataset.row+':'+cell.dataset.col,cell.value])),rows=Math.max(1,Math.min(6,Number(panel.querySelector('[data-matrix-rows]').value)||2)),cols=Math.max(1,Math.min(6,Number(panel.querySelector('[data-matrix-columns]').value)||2));panel.querySelector('[data-matrix-grid]').innerHTML=Array.from({length:rows},(_,r)=>`<div class="studio-actions">${Array.from({length:cols},(_,c)=>`<label>Row ${r+1}, column ${c+1}<input data-matrix-cell data-row="${r}" data-col="${c}" value="${esc(previous.get(r+':'+c)??(r===c?'1':'0'))}"></label>`).join('')}</div>`).join('');}
@@ -155,7 +181,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  function dispose(){s.disposed=true;clearTimeout(s.autosave);clearTimeout(s.historyTimer);clearTimeout(s.previewTimer);destroyEditor();s.mathModule?.hideMathKeyboard();host.classList.remove('content-studio-dialog');host.removeEventListener('click',click);host.removeEventListener('keydown',ribbonKeys);host.removeEventListener('input',change);host.removeEventListener('change',selectChange);host.removeEventListener('cancel',cancel);host.removeEventListener('dragstart',dragStart);host.removeEventListener('dragover',dragOver,true);host.removeEventListener('drop',drop,true);host.removeEventListener('dragend',dragEnd);window.removeEventListener('beforeunload',unload);window.removeEventListener('online',online);}
  async function click(event){
   const target=event.target.closest('[data-studio]');if(s.disposed)return;
-  if(!target){const card=event.target.closest('[data-block]'),id=card?.dataset.block,block=blocks().find(b=>b.id===id);if(block?.type==='equation'&&event.target.closest('.math-source')){s.blockId=id;render();await openEquation({kind:'block',id,latex:block.latex});}else if(block&&s.blockId!==id){s.blockId=id;render();if(block.type==='rich-text')s.editor?.commands.focus();}return;}
+  if(!target){const card=event.target.closest('[data-block]'),id=card?.dataset.block,block=blocks().find(b=>b.id===id);if(block?.type==='equation'&&event.target.closest('.math-source')){s.blockId=id;render();await openEquation({kind:'block',id,latex:block.latex});}else if(block&&s.blockId!==id){s.blockId=id;render();if(block.type==='rich-text')focusEditor();}return;}
   event.preventDefault();const action=target.dataset.studio;
   try{
    if(action==='ribbon'){switchTab(target.dataset.ribbonTab);return;}
@@ -163,7 +189,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    if(action==='start-document'||action==='write'){
     if(!current())mutate(()=>{const lesson=blankLesson();s.week.lessons.push(lesson);s.lessonId=lesson.id;});
     if(selected()?.type!=='rich-text'){continueWriting();return;}
-    switchTab('home');s.editor?.commands.focus('end');return;
+    switchTab('home');focusEditor('end');return;
    }
    if(action==='save')await save();if(action==='publish'){if(!publicationIssues(s.week).length)await save(true);else reviewPublication();}if(action==='check-ready')reviewPublication();if(action==='close')await close();if(action==='discard')host.close();
    if(action==='fix-issue'){const issue=s.issues?.[Number(target.dataset.issue)];if(!issue)return;if(issue.lessonId)s.lessonId=issue.lessonId;if(issue.blockId)s.blockId=issue.blockId;if(issue.bank){s.forceBank=issue.bank;s[issue.bank==='quiz'?'quizIndex':'questionIndex']=issue.index||0;}s.tab=issue.bank?'questions':issue.path?.startsWith('week.')?'file':issue.path?'home':'insert';render();const el=issue.path?host.querySelector(`[data-path="${issue.path}"]`):host.querySelector(issue.bank?`[data-bank-panel="${issue.bank}"]`:'.studio-insert');if(el){for(let parent=el.closest('details');parent;parent=parent.parentElement?.closest('details'))parent.open=true;el.scrollIntoView({block:'center'});el.focus();}}
@@ -173,18 +199,18 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    if(action==='blank-template')mutate(()=>{const lesson=blankLesson();s.week={...s.week,title:'',subtitle:'',reflectionPrompt:'',lessons:[lesson],quiz:[]};s.lessonId=lesson.id;s.blockId=null;s.questionIndex=0;s.quizIndex=0;});
    if(action==='remove-practice'||action==='remove-quiz')mutate(()=>{if(action==='remove-quiz'){s.week.quiz.splice(s.quizIndex,1);s.quizIndex=Math.max(0,s.quizIndex-1);}else{const q=current().questions.filter(q=>q.stage!=='quiz')[s.questionIndex];current().questions=current().questions.filter(v=>v!==q);s.questionIndex=Math.max(0,s.questionIndex-1);}});
    if(action==='select'){s.blockId=target.dataset.id;render();}
-   if(action==='insert'){if(!current()){status('Create a lesson first, or add a subtopic in File.');return;}const type=target.dataset.type||s.insertType||'rich-text';if(type==='rich-text')s.tab='home';insertLessonBlock(newBlock(type));host.querySelector('[data-item-editor]')?.scrollIntoView({block:'center'});if(type==='rich-text')s.editor?.commands.focus();}
+   if(action==='insert'){if(!current()){status('Create a lesson first, or add a subtopic in File.');return;}const type=target.dataset.type||s.insertType||'rich-text';if(type==='rich-text')s.tab='home';insertLessonBlock(newBlock(type));}
    if(action==='insert-template'){const template=s.templates.find(v=>v.id===host.querySelector('[data-template]').value);if(template)insertLessonBlock({...structuredClone(template.block),id:uid()});}
    if(['up','down','remove','duplicate'].includes(action))mutate(()=>{const all=blocks(),index=all.findIndex(b=>b.id===target.dataset.id);if(index<0)return;if(action==='remove')all.splice(index,1);if(action==='duplicate'){const copy={...structuredClone(all[index]),id:uid()};all.splice(index+1,0,copy);s.blockId=copy.id;}if(action==='up'&&index>0)[all[index-1],all[index]]=[all[index],all[index-1]];if(action==='down'&&index<all.length-1)[all[index+1],all[index]]=[all[index],all[index+1]];});
-   if(action==='undo'||action==='redo'){if(s.lastEdit==='text'&&s.editor&&(action==='undo'?s.editor.can().undo():s.editor.can().redo())){s.editor.chain().focus()[action]().run();}else{historyPoint();const index=s.undoIndex+(action==='undo'?-1:1);if(index>=0&&index<s.undo.length){s.undoIndex=index;s.week=JSON.parse(s.undo[index]);changed();render();}}}
+   if(action==='undo'||action==='redo'){if(s.lastEdit==='text'&&s.editor&&(action==='undo'?s.editor.can().undo():s.editor.can().redo())){s.editor.chain().focus()[action]().run();focusEditor();}else{historyPoint();const index=s.undoIndex+(action==='undo'?-1:1);if(index>=0&&index<s.undo.length){s.undoIndex=index;s.week=JSON.parse(s.undo[index]);changed();render();}}}
    if(action.startsWith('text-')){
     if(!s.editor){status('Select a formatted-text block to use the text toolbar.');return;}const command=action.slice(5),chain=s.editor.chain().focus();
     if(command==='inline-equation'){await openEquation({kind:'inline',editor:s.editor});return;}
     if(command==='link'){const panel=host.querySelector('[data-studio-panel]');panel.hidden=false;panel.innerHTML='<label>Full HTTPS or mailto link<input data-link-url type="url"></label>'+button('apply-link','Apply link')+button('remove-link','Remove link');return;}
-    const method={bold:'toggleBold',italic:'toggleItalic',underline:'toggleUnderline',subscript:'toggleSubscript',superscript:'toggleSuperscript',bullet:'toggleBulletList',ordered:'toggleOrderedList',quote:'toggleBlockquote'}[command];if(method)chain[method]().run();
+    const method={bold:'toggleBold',italic:'toggleItalic',underline:'toggleUnderline',subscript:'toggleSubscript',superscript:'toggleSuperscript',bullet:'toggleBulletList',ordered:'toggleOrderedList',quote:'toggleBlockquote'}[command];if(method){chain[method]().run();focusEditor();}
    }
-   if(action==='apply-link'){const href=safeLink(host.querySelector('[data-link-url]').value);if(!href)throw Error('Use a full HTTPS or mailto address.');s.editor.chain().focus().setLink({href}).run();host.querySelector('[data-studio-panel]').hidden=true;}
-   if(action==='remove-link'){s.editor?.chain().focus().unsetLink().run();host.querySelector('[data-studio-panel]').hidden=true;}
+   if(action==='apply-link'){const href=safeLink(host.querySelector('[data-link-url]').value);if(!href)throw Error('Use a full HTTPS or mailto address.');s.editor.chain().focus().setLink({href}).run();focusEditor();host.querySelector('[data-studio-panel]').hidden=true;}
+   if(action==='remove-link'){s.editor?.chain().focus().unsetLink().run();focusEditor();host.querySelector('[data-studio-panel]').hidden=true;}
    if(action==='equation')await openEquation({kind:'block',id:selected().id,latex:selected().latex});
    if(action==='symbol'||action==='fraction-template'||action==='matrix-template'){
     let latex={fraction:'\\frac{a}{b}',power:'x^2',root:'\\sqrt{x}',pi:'\\pi',theta:'\\theta',sum:'\\sum_{i=1}^{n}i',integral:'\\int_0^1 x\\,dx',le:'\\le',ge:'\\ge',pm:'\\pm',log:'\\log_{10}(x)',trig:'\\sin(x)'}[target.dataset.symbol];
@@ -194,14 +220,14 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    }
    if(action==='matrix-resize')drawMatrix();if(action==='keyboard'){s.mathField?.focus();s.mathModule?.showMathKeyboard(host.querySelector('[data-studio-panel]'));}
    if(action==='apply-equation'){
-    await showEquationPreview();if(!s.equationValid)return;const target=s.equationTarget;
+    if(host.querySelector('[data-math-mode]')?.value==='source')s.equationLatex=host.querySelector('[data-latex]').value;await showEquationPreview();if(!s.equationValid)return;const target=s.equationTarget;
     if(target.kind==='block')mutate(()=>{const block=blocks().find(b=>b.id===target.id);block.latex=s.equationLatex;});
-    else{if(target.position!==undefined){target.editor.chain().focus().setNodeSelection(target.position).updateAttributes('inlineMath',{latex:s.equationLatex}).setTextSelection(target.position+1).run();}else target.editor.chain().focus().insertContentAt(target.insertionPosition,{type:'inlineMath',attrs:{latex:s.equationLatex}}).setTextSelection(target.insertionPosition+1).run();}
+    else{if(target.position!==undefined){target.editor.chain().focus().setNodeSelection(target.position).updateAttributes('inlineMath',{latex:s.equationLatex}).setTextSelection(target.position+1).run();editorModule.focusNow(target.editor);}else target.editor.chain().focus().insertContentAt(target.insertionPosition,{type:'inlineMath',attrs:{latex:s.equationLatex}}).setTextSelection(target.insertionPosition+1).run();editorModule.focusNow(target.editor);}
     s.mathModule?.hideMathKeyboard();s.equationTarget=null;host.querySelector('[data-studio-panel]').hidden=true;
-    if(target.kind==='block')host.querySelector('[data-studio="continue-writing"]')?.focus();
+    if(target.kind==='block')continueWriting(target.id);
    }
    if(action==='preview'&&current())await preview({schemaVersion:1,blocks:blocks()});
-   if(action==='hide-panel'){s.equationTarget=null;s.mathModule?.hideMathKeyboard();host.querySelector('[data-studio-panel]').hidden=true;}
+   if(action==='hide-panel'){const fresh=s.equationTarget?.fresh?s.equationTarget.id:null;s.equationTarget=null;s.mathModule?.hideMathKeyboard();host.querySelector('[data-studio-panel]').hidden=true;if(fresh)continueWriting(fresh);}
    if(action==='history')await showHistory();
    if(action==='history-view'){
     const version=host.querySelector('[data-history-version]').value,record=await call('weekly-history?week='+s.week.id+'&version='+encodeURIComponent(version)),lesson=record.content.lessons.find(l=>l.id===s.lessonId)||record.content.lessons[0],preview=host.querySelector('[data-history-preview]');
@@ -220,8 +246,8 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   if(el.matches('[data-lesson]')){if(s.dirty&&!await save())return;s.lessonId=el.value;s.blockId=null;s.questionIndex=0;render();}
   if(el.dataset.bank){s[el.dataset.bank==='quiz'?'quizIndex':'questionIndex']=Number(el.value);render();}
   if(el.dataset.questionKind){const q=el.dataset.questionKind==='quiz'?s.week.quiz[s.quizIndex]:current().questions.filter(q=>q.stage!=='quiz')[s.questionIndex];q.kind=el.value;if(q.kind==='choice')q.options??=['',''];changed();render();}
-  if(el.id==='studio-heading'&&s.editor){if(el.value==='0')s.editor.chain().focus().setParagraph().run();else s.editor.chain().focus().setHeading({level:Number(el.value)}).run();}
-  if(el.id==='studio-align'&&s.editor)s.editor.chain().focus().setTextAlign(el.value).run();
+  if(el.id==='studio-heading'&&s.editor){{if(el.value==='0')s.editor.chain().focus().setParagraph().run();else s.editor.chain().focus().setHeading({level:Number(el.value)}).run();focusEditor();}}
+  if(el.id==='studio-align'&&s.editor){s.editor.chain().focus().setTextAlign(el.value).run();focusEditor();}
   if(el.matches('[data-equation-display]')){selected().displayMode=el.checked;changed();}
   if(el.matches('[data-release]'))s.release=el.checked;
   if(el.matches('[data-preview-width]'))host.querySelector('.studio-preview').style.width=el.value;
@@ -233,7 +259,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  function dragEnd(){s.dragId=null;}
  function ribbonKeys(event){
   const card=event.target.closest('[data-block]');
-  if(card&&event.key==='Enter'&&!event.shiftKey&&(event.ctrlKey||event.metaKey||event.target===card||event.target.matches('[data-path="block.video"]'))){
+  if(card&&event.key==='Enter'&&!event.shiftKey&&(event.ctrlKey||event.metaKey||event.target===card||event.target.matches('[data-path="block.video"]')||card.dataset.kind==='heading'&&event.target.matches('[data-path="block.text"]'))){
    if(event.target.matches('[data-path="block.video"]')&&!youtubeVideoId(event.target.value)){status('Use a valid HTTPS YouTube video link before continuing.');return;}
    event.preventDefault();continueWriting(card.dataset.block);return;
   }

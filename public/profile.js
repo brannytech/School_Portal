@@ -1,10 +1,10 @@
 'use strict';
 
 function profileAvatar(account,large=false) {
- return `<span class="avatar${large?' avatar-large':''}">${account.photoId&&(account.id===user?.id||user?.role==='ADMIN'||canRegisterRoster()||canManageRoster())?`<img src="/api/profile-photo/${encodeURIComponent(account.id)}?sessionId=${encodeURIComponent(academicId)}&v=${encodeURIComponent(account.photoId)}" alt="${esc(account.name)}’s profile photo">`:esc(initials(account.name))}</span>`;
+ return `<span class="avatar${large?' avatar-large':''}" ${large?'':'aria-hidden="true"'}>${account.photoId&&(account.id===user?.id||user?.role==='ADMIN'||canRegisterRoster()||canManageRoster())?`<img src="/api/profile-photo/${encodeURIComponent(account.id)}?sessionId=${encodeURIComponent(academicId)}&v=${encodeURIComponent(account.photoId)}" alt="${esc(account.name)}’s profile photo">`:esc(initials(account.name))}</span>`;
 }
 function profileButton(account,sidebar=false) {
- return `<button class="account-button${sidebar?' account-summary':''}" data-action="account-open" aria-label="Open profile and sign out" aria-haspopup="dialog">${profileAvatar(account)}${sidebar?`<span><strong>${esc(account.name)}</strong><small>View profile · Sign out</small></span>`:'<span class="account-label">Profile</span>'}</button>`;
+ return `<button class="account-button${sidebar?' account-summary':''}" data-action="account-open" aria-haspopup="dialog" title="Open profile and sign out">${profileAvatar(account)}${sidebar?`<span><strong>${esc(account.name)}</strong><small>View profile · Sign out</small></span>`:'<span class="account-label">Profile</span>'}</button>`;
 }
 const renderWithSchoolBrand=render;
 render=function() {

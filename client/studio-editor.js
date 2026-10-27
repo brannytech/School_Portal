@@ -3,6 +3,16 @@ import StarterKit from '@tiptap/starter-kit';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import TextAlign from '@tiptap/extension-text-align';
+import {Selection} from '@tiptap/pm/state';
+
+// Synchronous focus: Tiptap's own focus command defers to the next animation frame, which steals focus from a field the user has already moved to.
+export function focusNow(editor,position=null){
+ if(!editor||editor.isDestroyed)return;
+ const {state,view}=editor;
+ if(position==='start')view.dispatch(state.tr.setSelection(Selection.atStart(state.doc)));
+ if(position==='end')view.dispatch(state.tr.setSelection(Selection.atEnd(state.doc)));
+ view.focus();
+}
 
 export function createRichEditor({element,content,onUpdate,onEquation}){
  const InlineMath=Node.create({

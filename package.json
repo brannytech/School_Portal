@@ -11,6 +11,7 @@
     "start": "node --env-file-if-exists=.env --experimental-sqlite server.mjs",
     "seed": "node --env-file-if-exists=.env --experimental-sqlite scripts/seed.mjs",
     "test": "node --experimental-sqlite --test tests/*.test.mjs",
+    "verify-studio-flow": "node scripts/verify-studio-flow.mjs",
     "verify-math": "node scripts/verify-math/index.mjs && node scripts/verify-math/curriculum.mjs",
     "build": "tsc && node scripts/build-editor.mjs && node scripts/check-build.mjs",
     "typecheck": "tsc --noEmit",

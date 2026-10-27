@@ -72,13 +72,13 @@ dialog::backdrop{background:#071729a8}
 .account-button{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 8px;border-color:var(--line);background:var(--paper);border-radius:24px;flex-shrink:0}
 .account-button:hover{background:var(--soft)}
 .account-button .avatar{width:34px;height:34px}
-.account-label{font-size:11px;padding-right:4px}
+.account-label{font-size:12px;padding-right:4px}
 .school{padding:18px 0;margin-bottom:10px}
 .school .account-summary{width:100%;padding:9px 6px;text-align:left;border-radius:10px;border-color:transparent}
 .school .account-summary span{color:var(--ink)}
-.account-summary>span:last-child{min-width:0;font-size:11px}
+.account-summary>span:last-child{min-width:0;font-size:12px}
 .account-summary strong{display:block;overflow-wrap:anywhere;font-size:12px;line-height:1.5}
-.account-summary small{display:block;color:var(--muted);font-size:10px;line-height:1.8}
+.account-summary small{display:block;color:var(--muted);font-size:12px;line-height:1.8}
 .account-details{text-align:center}.account-details h3{margin:14px 0 0;font-size:20px}.account-details p{margin:6px 0 14px}
 .account-badges{justify-content:center;gap:8px}
 .avatar-large{width:104px;height:104px;font-size:30px;margin:0 auto;border:3px solid var(--paper);outline:2px solid var(--line)}
@@ -88,7 +88,7 @@ dialog::backdrop{background:#071729a8}
 @media(max-width:700px){
  .topbar>.row{gap:6px}.topbar .account-button{padding:3px;min-width:44px;min-height:44px;justify-content:center}
  .topbar .account-button .avatar{width:34px;height:34px}.account-label{display:none}
- .topbar .term-select{font-size:10px;width:auto;max-width:125px;min-width:0;flex:1}
+ .topbar .term-select{font-size:12px;width:auto;max-width:125px;min-width:0;flex:1}
  .auth-brand img{width:38px}
 }
 

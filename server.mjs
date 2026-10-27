@@ -79,6 +79,19 @@ async function handle(req,res){
  if(u.role==='STUDENT'){const enrolled=classFor(u);if(!enrolled)fail(403,'You are not enrolled in this academic session.');u={...u,class:enrolled};}
 
  if(!['GET','HEAD'].includes(method)&&req.headers['x-csrf-token']!==session.csrf)fail(403,'Session check failed. Refresh and try again.');
+ if(u.mustChangePassword&&!['me','logout','change-password','config'].includes(endpoint))fail(403,'Choose a new password before continuing.');
+ if(endpoint==='change-password'&&method==='POST'){
+  rate('change-password:'+u.id,8);const next=String(b.newPassword||'');
+  if(!matches(String(b.currentPassword||''),u.password))fail(400,'Your current password is not correct.');
+  if(next.length<12)fail(400,'Use a new password of at least 12 characters.');
+  if(next===String(b.currentPassword))fail(400,'Choose a password different from the temporary one.');
+  if(next.toLowerCase().includes(u.email.split('@')[0].toLowerCase())&&u.email.split('@')[0].length>=4)fail(400,'Do not include your email name in the password.');
+  const account=db.users.find(v=>v.id===u.id);account.password=hash(next);delete account.mustChangePassword;audit(u,'Changed account password');await save();
+  await sessions.revoke(u.id);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');await sessions.set(id,{user:u.id,csrf,expires:Date.now()+8*3600000});
+  res.setHeader('Set-Cookie',`lab_session=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==='true'?'; Secure':''}`);
+  try{fs.unlinkSync(path.join(dataDir,'FIRST-LOGIN.txt'));}catch{}
+  json({user:safeUser(account),csrf});return;
+ }
  if(endpoint==='logout'&&method==='POST'){await sessions.delete(sid);res.setHeader('Set-Cookie','lab_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');json({ok:true});return;}
  if(endpoint==='presence'&&method==='POST'){if(u.role!=='STUDENT')fail(403,'Student activity only.');rate('presence:'+u.id,6);json({lastSeen:await recordStudentPresence(u)});return;}
  if(endpoint==='me'){json({user:safeUser(u),csrf:session.csrf,currentTerm:currentTerm(),currentSessionId:db.currentSessionId,sessionId:academicSession(),sessions:db.sessions.filter(v=>u.role!=='STUDENT'||db.enrolments.some(e=>e.student===u.id&&e.sessionId===v.id)),policy:db.policy,allocations:db.allocations.filter(a=>a.teacher===u.id&&belongs(a))});return;}

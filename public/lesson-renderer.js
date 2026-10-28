@@ -26,6 +26,7 @@ function renderBlock(block,renderWidget){
   case 'separator':return '<hr class="divider">';
   case 'table':return `<div class="table-wrap"><table><caption>${escape(block.caption)}</caption><thead><tr>${block.headers.map(value=>`<th scope="col">${escape(value)}</th>`).join('')}</tr></thead><tbody>${block.rows.map(row=>`<tr>${row.map(value=>`<td>${escape(value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   case 'video':return `<h3>Watch and learn</h3><div class="course-video"><iframe loading="lazy" src="https://www.youtube-nocookie.com/embed/${block.videoId}" title="Lesson video" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+  case 'image':return `<figure class="lesson-image lesson-image-${block.width} lesson-image-${block.align}"><img src="/api/media/${encodeURIComponent(block.fileId)}" alt="${block.decorative?'':escape(block.alt)}" loading="lazy" decoding="async">${block.caption?`<figcaption>${escape(block.caption)}</figcaption>`:''}</figure>`;
   case 'widget':return renderWidget?renderWidget():'';
   case 'graph':return `<div class="math-interactive" data-math-graph="${escape(JSON.stringify(block.graph))}"><p>Interactive graph: ${escape(block.graph.title)}. Loading local graph controls…</p></div>`;
   case 'math-tool':return `<div class="math-interactive" data-math-tool="${escape(JSON.stringify(block.config))}"><p>Mathematics toolkit: ${escape(block.config.tool)}. Loading controls…</p></div>`;

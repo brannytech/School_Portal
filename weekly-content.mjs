@@ -109,6 +109,7 @@ export async function weeklyContentApi(x){
   if(b.publish!==true){db.weekDrafts??={};const nextRevision=randomUUID();db.weekDrafts[key+'|'+id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextRevision,baseRevision:revision,assignments:b.assignments||[]};await save();json({saved:true,published:false,week:input,revision,draftRevision:nextRevision});return true;}
   const allIds=(input.lessons||[]).map(l=>l.id).filter(Boolean);const targets=new Set(Array.isArray(b.release?.lessons)&&b.release.lessons.length?b.release.lessons:allIds);
   const week=prepareWeek(input,fail,targets);
+  for(const lesson of week.lessons)for(const block of lesson.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==c||f.subject!==s||f.sessionId!==ctx.sessionId)fail(400,`${lesson.title}: an image is missing or belongs to another class. Insert it again.`);}
   const previousIds=new Set((existing?.lessons||[]).map(l=>l.id));const legacyOpen=new Set((existing?.lessons||[]).filter(l=>releaseState(c,s,t,l.id,scopeKey).available).map(l=>l.id));
   if(!Array.isArray(b.assignments)||b.assignments.length>30)fail(400,'Add up to 30 assignments.');
   const prepared=b.assignments.map(a=>{const previous=a.id?db.assignments.find(v=>v.id===a.id&&fits(v)&&Number(v.week)===week.id):null;if(a.id&&!previous)fail(400,'An assignment does not belong to this week.');return prepareAssignment({...a,week:week.id},ctx,u.id,fail,previous);});

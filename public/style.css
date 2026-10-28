@@ -24,3 +24,10 @@ body.dark .auth{background:var(--paper)}body.dark .auth-demo{background:var(--so
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 :focus-visible{outline:3px solid #7aa35a;outline-offset:2px}
+
+/* Lesson images */
+.lesson-image{margin:16px 0;max-width:100%}
+.lesson-image img{display:block;max-width:100%;height:auto;border-radius:12px;border:1px solid var(--line,#d9e2ec);background:#fff}
+.lesson-image figcaption{margin-top:6px;font-size:.9rem;color:var(--muted,#52606d)}
+.lesson-image-small img{max-width:min(100%,260px)}.lesson-image-medium img{max-width:min(100%,520px)}.lesson-image-full img{width:100%}
+.lesson-image-left{margin-right:auto}.lesson-image-center{margin-inline:auto;text-align:center}.lesson-image-center img{margin-inline:auto}.lesson-image-right{margin-left:auto;text-align:right}.lesson-image-right img{margin-left:auto}

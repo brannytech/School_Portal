@@ -19,7 +19,7 @@ async function call(page,route,data){return page.evaluate(async({route,data})=>{
 async function openBank(page,index){await studioTab(page,'Questions');const bank=page.locator('.studio-bank').nth(index);if(!await bank.evaluate(el=>el.open))await bank.locator('summary').click();}
 async function saved(page){await page.waitForFunction(()=>document.querySelector('[data-studio-status]')?.textContent.startsWith('All changes saved'),null,{timeout:20000});}
 async function insert(page,type){await studioTab(page,'Insert');await page.locator('[data-insert-type]').selectOption(type);await page.locator('[data-studio="insert"]:not([data-type])').click();}
-async function publish(page){await action(page,'publish').click();await page.waitForFunction(()=>document.querySelector('[data-studio-status]')?.textContent.startsWith('Published'));}
+async function publish(page){await action(page,'publish').click();await page.locator('[data-studio=\"publish-confirm\"]').click();await page.waitForFunction(()=>document.querySelector('[data-studio-status]')?.textContent.startsWith('Published'));}
 async function fillQuestion(page,kind,prompt,answer,explanation){await field(page,kind+'.prompt').fill(prompt);if(await field(page,kind+'.answer').evaluate(el=>el.tagName)==='SELECT')await field(page,kind+'.answer').selectOption(answer);else await field(page,kind+'.answer').fill(answer);await field(page,kind+'.explanation').fill(explanation);}
 try{
  for(let i=0;i<150&&!root&&server.exitCode===null;i++)await new Promise(r=>setTimeout(r,100));assert(root,log);browser=await chromium.launch({headless:true,channel:process.env.AUDIT_BROWSER_CHANNEL||'chrome'});

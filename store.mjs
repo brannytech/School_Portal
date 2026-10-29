@@ -9,6 +9,14 @@ fs.mkdirSync(dataDir,{recursive:true});
 export const hash=password=>{const salt=randomBytes(16).toString('hex');return salt+':'+scryptSync(password,salt,64).toString('hex');};
 export const matches=(p,h)=>{try{const [salt,key]=h.split(':');return timingSafeEqual(scryptSync(p,salt,64),Buffer.from(key,'hex'));}catch{return false;}};
 const file=path.join(dataDir,'database.json');
+export const sampleMode=()=>Boolean(process.env.DEMO_PASSWORD)||process.env.SEED_SAMPLE_DATA==='true'||process.env.DEMO_MODE==='true';
+const tempPassword=()=>{const w=()=>randomBytes(3).toString('hex');return `Lab-${w()}-${w()}-${w()}`;};
+export function cleanSeed(){
+ const email=(process.env.ADMIN_EMAIL||'admin@school.local').toLowerCase(),password=process.env.ADMIN_PASSWORD||tempPassword();
+ if(!process.env.ADMIN_PASSWORD)firstRun={email,password};
+ return {clean:true,users:[{id:'initial-admin',name:'School Administrator',email,role:'ADMIN',status:'ACTIVE',password:hash(password),mustChangePassword:true}],assignments:[],currentTerm:1,allocations:[],classes:['JSS1','JSS2','JSS3','SS1','SS2','SS3'],subjects:['Mathematics','English Language','Physics','Chemistry','Biology'],unlocks:{},termLocks:[],submissions:[],files:[],progress:[],reflections:[],questions:[],scores:[],resources:[],audit:[]};
+}
+export let firstRun=null;
 export function seed(){const password=hash(process.env.DEMO_PASSWORD||randomBytes(24).toString('hex'));return {users:[
  {id:'admin',name:'Olawale Admin',email:'admin@olawaleslab.school',role:'ADMIN',status:'ACTIVE',password},
  {id:'teacher',name:'Mrs. Adebayo',email:'teacher@olawaleslab.school',role:'TEACHER',status:'ACTIVE',password},
@@ -25,7 +33,7 @@ export const sql=await openDatabase(dataDir);
 const persistence=relationalStore(sql);
 const existing=await loadDatabase(sql);
 const legacy=!existing&&fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
-export let db=existing||legacy||seed();
+export let db=existing||legacy||(sampleMode()?seed():cleanSeed());
 const year=new Date().getFullYear()-(new Date().getMonth()<8?1:0);
 const sessionName=process.env.INITIAL_SESSION||year+'/'+(year+1);
 db.school??={id:'grace-field',name:'Grace-Field College, Ibadan',motto:'Raising young minds for future impact.'};
@@ -38,7 +46,7 @@ for(const key of [...Object.keys(entityTables),'versions','markingHistory','noti
 for(const a of db.allocations){a.id??=randomBytes(16).toString('hex');a.sessionId??=db.currentSessionId;}
 db.courses??={};
 for(const key of Object.keys(db.courses))if(!key.includes('|')){db.courses[db.currentSessionId+'|'+key]=db.courses[key];delete db.courses[key];}
-const initialKey=db.currentSessionId+'|SS1:Mathematics:1';if(!Object.keys(db.courses).length)db.courses[initialKey]=structuredClone(weeks);if((db.curriculumVersion||0)<3){for(const [key,course]of Object.entries(db.courses))if(key.endsWith('|SS1:Mathematics:1')&&course.length===8&&(course[0].lessons[0].questions[0]?.id==='w1q0'||course[0].lessons[0].questions[0]?.id?.startsWith('bank-'))){db.legacyCourseBackups??={};db.legacyCourseBackups[key]=structuredClone(course);db.courses[key]=structuredClone(weeks);}db.curriculumVersion=3;}
+const initialKey=db.currentSessionId+'|SS1:Mathematics:1';if(!db.clean&&!Object.keys(db.courses).length)db.courses[initialKey]=structuredClone(weeks);if((db.curriculumVersion||0)<3){for(const [key,course]of Object.entries(db.courses))if(key.endsWith('|SS1:Mathematics:1')&&course.length===8&&(course[0].lessons[0].questions[0]?.id==='w1q0'||course[0].lessons[0].questions[0]?.id?.startsWith('bank-'))){db.legacyCourseBackups??={};db.legacyCourseBackups[key]=structuredClone(course);db.courses[key]=structuredClone(weeks);}db.curriculumVersion=3;}
 if((db.curriculumVersion||0)<4){for(const [key,course]of Object.entries(db.courses))if(key.endsWith('|SS1:Mathematics:1')&&course.length===8&&course.every(w=>w.lessons.length===3&&w.lessons[0].questions[0]?.id?.startsWith('bank-'))){course.forEach((w,t)=>{w.lessons.push(...structuredClone(weeks[t].lessons.slice(3)));});}db.curriculumVersion=4;}
 for(const key of Object.keys(db.unlocks))if(!key.includes('|')){db.unlocks[db.currentSessionId+'|'+key]=db.unlocks[key];delete db.unlocks[key];}
 db.termLocks=db.termLocks.map(k=>k.includes('|')?k:db.currentSessionId+'|'+k);
@@ -52,8 +60,9 @@ db.demoData??=db.users.some(u=>u.id==='student'&&u.email==='student@olawaleslab.
 if(process.env.NODE_ENV==='production'){
  if(existing&&db.demoData)throw Error('Use a separate production DATA_DIR; this database contains development sandbox accounts.');
  if(!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)throw Error('Production requires a SESSION_SECRET of at least 32 characters.');
- if(!existing&&!legacy){if(!process.env.ADMIN_EMAIL||!process.env.ADMIN_PASSWORD||process.env.ADMIN_PASSWORD.length<14)throw Error('First production start requires ADMIN_EMAIL and a 14+ character ADMIN_PASSWORD.');db.demoData=false;db.users=[{id:'initial-admin',name:'School Administrator',email:process.env.ADMIN_EMAIL.toLowerCase(),role:'ADMIN',status:'ACTIVE',password:hash(process.env.ADMIN_PASSWORD)}];db.enrolments=[];db.allocations=[];for(const key of Object.keys(entityTables))db[key]=[];}
+ if(!existing&&!legacy){if(!process.env.ADMIN_EMAIL||!process.env.ADMIN_PASSWORD||process.env.ADMIN_PASSWORD.length<14)throw Error('First production start requires ADMIN_EMAIL and a 14+ character ADMIN_PASSWORD.');db.demoData=false;db.users=[{id:'initial-admin',name:'School Administrator',email:process.env.ADMIN_EMAIL.toLowerCase(),role:'ADMIN',status:'ACTIVE',password:hash(process.env.ADMIN_PASSWORD),mustChangePassword:true}];db.clean=true;db.enrolments=[];db.allocations=[];for(const key of Object.keys(entityTables))db[key]=[];}
  if(legacy)throw Error('A legacy demo database cannot be implicitly imported into production. Use a fresh DATA_DIR and the documented reviewed migration procedure.');
  db.appSecret=process.env.SESSION_SECRET;
 }
 await save();
+if(firstRun){const note=path.join(dataDir,'FIRST-LOGIN.txt');fs.writeFileSync(note,`First sign-in\nEmail:    ${firstRun.email}\nPassword: ${firstRun.password}\nYou will be asked to choose a new password immediately. This file is deleted afterwards.\n`,{mode:0o600});console.log(`\n=====================================================\n  FIRST RUN - administrator account created\n  Email:    ${firstRun.email}\n  Password: ${firstRun.password}\n  (temporary - you must change it at first sign-in)\n=====================================================\n`);}

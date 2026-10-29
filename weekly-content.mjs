@@ -28,24 +28,27 @@ function question(input,id,fail){
  if(Array.isArray(input.variables))q.variables=input.variables.map(v=>clean(v,30));if(Number.isFinite(input.tolerance)&&input.tolerance>=0)q.tolerance=input.tolerance;
  return q;
 }
-function prepareWeek(input,fail){
+function prepareWeek(input,fail,only=null){
  const id=Number(input?.id);if(!Number.isInteger(id)||id<1||id>52)fail(400,'Choose a week from 1 to 52.');
+ const strict=l=>!only||only.has(l.id);
  const week={...input,id,title:clean(input.title,200),subtitle:clean(input.subtitle,1000),reflectionPrompt:clean(input.reflectionPrompt)||'What did you learn from this week’s topic, and what do you still need help with?',workflow:'weekly',updatedAt:new Date().toISOString(),publicationId:randomUUID()};
  if(!week.title||!Array.isArray(input.lessons)||!input.lessons.length||input.lessons.length>30)fail(400,'Add a weekly topic and between 1 and 30 subtopics.');
  const ids=new Set();week.lessons=input.lessons.map((l,index)=>{
   const key=clean(l.id,100)||`${id}-${randomUUID()}`;if(!key.startsWith(id+'-')||ids.has(key))fail(400,'Subtopics need unique IDs belonging to this week.');ids.add(key);
   const videoUrl=clean(l.videoUrl,1500);if(videoUrl&&!youtubeId(videoUrl))fail(400,'Use a valid HTTPS YouTube video link.');
   const lesson={...l,id:key,week:id,order:index+1,title:clean(l.title,200),minutes:Math.max(1,Math.min(240,Number(l.minutes)||20)),objectives:(l.objectives||[]).map(v=>clean(v,1000)),explain:clean(l.explain,40000),realLife:clean(l.realLife),experiment:clean(l.experiment),summary:(l.summary||[]).map(v=>clean(v,1000)),videoUrl,commonMistake:clean(l.commonMistake),questions:[]};
-  if(!lesson.title||(!lesson.explain&&!lesson.document?.blocks.length))fail(400,'Each subtopic needs a title and learning content.');
-  if(!Array.isArray(l.questions)||!l.questions.length||l.questions.length>100)fail(400,'Add between 1 and 100 practice questions to each subtopic.');
+  if(strict(l)&&(!lesson.title||(!lesson.explain&&!lesson.document?.blocks.length)))fail(400,`${lesson.title||'A subtopic'} needs a title and learning content before it can be released.`);
+  if(!lesson.title)lesson.title='Untitled subtopic';
+  if(!Array.isArray(l.questions)||l.questions.length>100)fail(400,'Add up to 100 practice questions to each subtopic.');
   lesson.questions=l.questions.map((q,i)=>question(q,`practice-${i+1}`,fail));
   if(new Set(lesson.questions.map(q=>q.id)).size!==lesson.questions.length)fail(400,'Practice question IDs must be unique.');
   lesson.example=l.example?.prompt?question(l.example,'worked-example',fail):null;return lesson;
  });
- if(!Array.isArray(input.quiz)||!input.quiz.length||input.quiz.length>100)fail(400,'Add between 1 and 100 questions to the weekly quiz.');
+ if(!Array.isArray(input.quiz)||input.quiz.length>100)fail(400,'Add up to 100 questions to the weekly quiz.');
  week.quiz=input.quiz.map((q,i)=>({...question(q,`quiz-${i+1}`,fail),stage:q.stage||'quiz'}));
  if(new Set(week.quiz.map(q=>q.id)).size!==week.quiz.length)fail(400,'Weekly quiz question IDs must be unique.');return week;
 }
+function releaseWarnings(week,targets){const out=[];for(const l of week.lessons)if(targets.has(l.id)&&!l.questions.length)out.push(`${l.title}: no practice questions yet.`);if(!week.quiz.length)out.push('This week has no weekly quiz yet.');return out;}
 export function prepareAssignment(b,ctx,teacher,fail,previous){
  const status=b.status||previous?.status||'PUBLISHED',week=Number(b.week||previous?.week);
  if(!['DRAFT','LOCKED','PUBLISHED','SCHEDULED'].includes(status))fail(400,'Choose draft, locked, published or scheduled.');
@@ -90,7 +93,7 @@ export async function weeklyContentApi(x){
  if(endpoint==='weekly-template'&&method==='GET'){
   staff();const id=Number(url.searchParams.get('week'));const key=scopeKey(c,s,t)+'|'+id;const week=course(c,s,t).find(w=>w.id===id);
   const draft=db.weekDrafts?.[key]||null;
-  json({draft,published:week||null,assignments:db.assignments.filter(a=>fits(a)&&a.week===id),revision:contentRevision(week),draftRevision:draft?.revision||draft?.savedAt||null});return true;
+  json({draft,published:week||null,releases:Object.fromEntries((week?.lessons||[]).map(l=>{const r=releaseState(c,s,t,l.id,scopeKey);return [l.id,{status:r.status,available:r.available,releaseAt:r.releaseAt||null}];})),assignments:db.assignments.filter(a=>fits(a)&&a.week===id),revision:contentRevision(week),draftRevision:draft?.revision||draft?.savedAt||null});return true;
  }
  if(endpoint==='weekly-template'&&method==='POST'){
   staff();const key=scopeKey(c,s,t),id=Number(b.week?.id);if(!Number.isInteger(id)||id<1||id>52)fail(400,'Choose a week from 1 to 52.');const existing=course(c,s,t).find(w=>w.id===id);
@@ -104,16 +107,30 @@ export async function weeklyContentApi(x){
   const input=mergeWeekContent(b.week,existing);
   validateWeekDocuments(input);assignDraftIds(input);
   if(b.publish!==true){db.weekDrafts??={};const nextRevision=randomUUID();db.weekDrafts[key+'|'+id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextRevision,baseRevision:revision,assignments:b.assignments||[]};await save();json({saved:true,published:false,week:input,revision,draftRevision:nextRevision});return true;}
-  const week=prepareWeek(input,fail);
+  const allIds=(input.lessons||[]).map(l=>l.id).filter(Boolean);const targets=new Set(Array.isArray(b.release?.lessons)&&b.release.lessons.length?b.release.lessons:allIds);
+  const week=prepareWeek(input,fail,targets);
+  for(const lesson of week.lessons)for(const block of lesson.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==c||f.subject!==s||f.sessionId!==ctx.sessionId)fail(400,`${lesson.title}: an image is missing or belongs to another class. Insert it again.`);}
+  // Adding to a published week: subtopics the teacher did not choose keep their live content; their edits stay in the private draft.
+  const pendingEdits=[];
+  if(existing)week.lessons=week.lessons.map(l=>{if(targets.has(l.id))return l;const old=existing.lessons.find(v=>v.id===l.id);if(!old)return l;const kept={...old,order:l.order};if(contentRevision(kept)!==contentRevision(l))pendingEdits.push(l.id);return kept;});
+  const previousIds=new Set((existing?.lessons||[]).map(l=>l.id));const legacyOpen=new Set((existing?.lessons||[]).filter(l=>releaseState(c,s,t,l.id,scopeKey).available).map(l=>l.id));
   if(!Array.isArray(b.assignments)||b.assignments.length>30)fail(400,'Add up to 30 assignments.');
   const prepared=b.assignments.map(a=>{const previous=a.id?db.assignments.find(v=>v.id===a.id&&fits(v)&&Number(v.week)===week.id):null;if(a.id&&!previous)fail(400,'An assignment does not belong to this week.');return prepareAssignment({...a,week:week.id},ctx,u.id,fail,previous);});
   await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);
   db.weekVersions??=[];const archive=content=>{if(content&&!db.weekVersions.some(v=>fits(v)&&v.week===week.id&&contentRevision(v.content)===contentRevision(content)))db.weekVersions.push({id:randomUUID(),...ctx,week:week.id,content:structuredClone(content),teacher:u.id,created:new Date().toISOString()});};archive(existing);archive(week);
   db.courses[key]=[...course(c,s,t).filter(w=>w.id!==week.id),week].sort((a,b)=>a.id-b.id);
-  for(const lesson of week.lessons){db.releases=db.releases.filter(r=>!fits(r)||r.lesson!==lesson.id);db.releases.push({id:randomUUID(),...ctx,lesson:lesson.id,status:b.unlock===false?'LOCKED':'UNLOCKED',teacher:u.id,updated:new Date().toISOString()});}
-  const opened=new Set(db.unlocks[key]||[]);if(b.unlock===false)opened.delete(week.id);else opened.add(week.id);db.unlocks[key]=[...opened];
+  const release=b.release||{mode:b.unlock===false?'LOCKED':'NOW'};
+  const modes={NOW:'UNLOCKED',SCHEDULED:'SCHEDULED',DRAFT:'DRAFT',LOCKED:'LOCKED'};
+  if(!modes[release.mode])fail(400,'Choose publish now, schedule, draft or locked.');
+  if(release.mode==='SCHEDULED'&&!Number.isFinite(Date.parse(release.releaseAt)))fail(400,'Choose a valid release date and time.');
+  for(const lesson of week.lessons){
+   const old=db.releases.find(r=>fits(r)&&r.lesson===lesson.id);const wasKnown=previousIds.has(lesson.id);
+   if(targets.has(lesson.id)){db.releases=db.releases.filter(r=>r!==old);db.releases.push({id:randomUUID(),...ctx,lesson:lesson.id,status:modes[release.mode],releaseAt:release.mode==='SCHEDULED'?new Date(release.releaseAt).toISOString():null,teacher:u.id,updated:new Date().toISOString()});}
+   else if(!old){db.releases.push({id:randomUUID(),...ctx,lesson:lesson.id,status:wasKnown&&legacyOpen.has(lesson.id)?'UNLOCKED':'DRAFT',teacher:u.id,updated:new Date().toISOString()});}
+  }
+  const keep=new Set(week.lessons.map(l=>l.id));db.releases=db.releases.filter(r=>!fits(r)||Number(String(r.lesson).split('-')[0])!==week.id||keep.has(r.lesson));
   for(const a of prepared){const index=db.assignments.findIndex(v=>v.id===a.id);if(index<0)db.assignments.push(a);else db.assignments[index]=a;}
-  delete db.weekDrafts?.[key+'|'+week.id];audit(u,`Published weekly template ${week.id} for ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({published:true,week:week.id,revision:contentRevision(week),draftRevision:null});return true;
+  let nextDraft=null;if(pendingEdits.length){nextDraft=randomUUID();db.weekDrafts??={};db.weekDrafts[key+'|'+week.id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextDraft,baseRevision:contentRevision(week),assignments:b.assignments||[]};}else delete db.weekDrafts?.[key+'|'+week.id];audit(u,`Published weekly template ${week.id} for ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({published:true,week:week.id,revision:contentRevision(week),draftRevision:nextDraft,pendingEdits,released:[...targets].filter(id=>keep.has(id)),mode:release.mode,warnings:releaseWarnings(week,targets)});return true;
  }
  if(endpoint==='assignment-save'&&method==='POST'){
   staff();const previous=b.id?db.assignments.find(a=>a.id===b.id&&fits(a)):null;if(b.id&&!previous)fail(404,'Assignment not found.');

@@ -69,7 +69,7 @@ export function validateLessonDocument(input){
  const ids=new Set();let characters=0;
  const blocks=input.blocks.map((block,index)=>{
   const label='Block '+(index+1);if(!object(block))invalid(label+' must be an object.');
-  const fields={heading:['text','level'],paragraph:['text'],'rich-text':['content'],equation:['latex','displayMode'],objectives:['items'],summary:['items'],hint:['text'],warning:['text'], 'real-life':['text'],experiment:['text'],'worked-example':['prompt','explanation','answer','steps'],table:['caption','headers','rows'],video:['videoId'],widget:['tool'],graph:['graph'],'math-tool':['config'],separator:[]};
+  const fields={heading:['text','level'],paragraph:['text'],'rich-text':['content'],equation:['latex','displayMode'],objectives:['items'],summary:['items'],hint:['text'],warning:['text'], 'real-life':['text'],experiment:['text'],'worked-example':['prompt','explanation','answer','steps'],table:['caption','headers','rows'],video:['videoId'],image:['fileId','alt','decorative','caption','width','align'],widget:['tool'],graph:['graph'],'math-tool':['config'],separator:[]};
   if(!Object.hasOwn(fields,block.type))invalid(label+' has an unsupported block type.');
   shape(block,['id','type',...fields[block.type]],label);
   if(typeof block.id!=='string'||!/^[-\w]{1,100}$/.test(block.id)||ids.has(block.id))invalid(label+' needs a unique ID (letters, numbers, hyphens or underscores).');
@@ -95,6 +95,15 @@ export function validateLessonDocument(input){
    result.rows=block.rows.map(row=>{if(!Array.isArray(row)||row.length!==result.headers.length)invalid(label+' table rows must match its headers.');return row.map(cell=>text(cell,label+' cell',4000));});
   }
   if(block.type==='video'){if(typeof block.videoId!=='string'||!/^[-\w]{11}$/.test(block.videoId))invalid(label+' needs a valid YouTube video ID.');result.videoId=block.videoId;}
+  if(block.type==='image'){
+   if(typeof block.fileId!=='string'||!/^[-\w]{8,64}$/.test(block.fileId))invalid(label+' needs an uploaded image.');
+   result.fileId=block.fileId;result.decorative=block.decorative===true;
+   result.alt=block.alt===undefined?'':text(block.alt,label+' alternative text',500);
+   if(!result.decorative&&!result.alt.trim())invalid(label+' needs alternative text describing the image, or mark it as decorative.');
+   result.caption=block.caption===undefined?'':text(block.caption,label+' caption',1000);
+   result.width=block.width===undefined?'medium':block.width;if(!['small','medium','full'].includes(result.width))invalid(label+' image width must be small, medium or full.');
+   result.align=block.align===undefined?'center':block.align;if(!['left','center','right'].includes(result.align))invalid(label+' image alignment must be left, centre or right.');
+  }
   if(block.type==='widget'){if(block.tool!=='topic')invalid(label+' has an unsupported learning tool.');result.tool='topic';}
   if(block.type==='separator'&&Object.keys(block).length!==2)invalid(label+' separator contains unsupported properties.');
   characters+=JSON.stringify(result).length;if(characters>documentLimits.characters)invalid('document exceeds the total content limit.');

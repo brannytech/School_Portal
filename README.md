@@ -2,6 +2,17 @@
 
 A working student-centred LMS with administrator approval, subject teachers, private work submission, interactive learning and assessment-based mastery. School motto: Raising young minds for future impact.
 
+## First sign-in (clean install)
+
+A fresh install contains no students, teachers, lessons or sample data, only one administrator.
+
+1. Run `npm start`. The first start prints the administrator email and a temporary password in the terminal and also saves them to `data/FIRST-LOGIN.txt`.
+2. Open http://127.0.0.1:3000 and sign in with those details (default email `admin@school.local`; set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` before the first start to choose your own).
+3. The portal immediately asks for a new password (at least 12 characters). Nothing else works until it is changed, and the temporary password stops working.
+4. From **School management → Add student / teacher** the administrator creates teachers and students, then assigns subjects to teachers.
+
+For development with sample accounts and the sample SS1 Mathematics course, set `DEMO_PASSWORD` or `SEED_SAMPLE_DATA=true` before the first start.
+
 ## Run
 
 Requires Node.js 22.11 or newer.

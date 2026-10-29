@@ -152,9 +152,8 @@ try{
   await notes[subject](page);
   await saved(page).catch(()=>{});
   await page.screenshot({path:path.join(output,subject.replace(/\s/g,'-')+'-studio.png')});
-  await page.locator('[data-studio="publish"]').click();
-  await page.waitForFunction(()=>/^Published/.test(document.querySelector('[data-studio-status]')?.textContent||'')||document.querySelector('.studio-checklist'),{timeout:20000});
-  assert(!await page.locator('.studio-checklist').count(),'Publication checklist reported unfinished items: '+await page.locator('.studio-checklist').allInnerTexts().catch(()=>''));
+  await page.locator('[data-studio="publish"]').click();await page.locator('[data-studio=\"publish-confirm\"]').click();
+  await page.waitForFunction(()=>/^Published/.test(document.querySelector('[data-studio-status]')?.textContent||''),{timeout:20000});
   const record=(await api(page,`weekly-template?week=${WEEK}&class=SS1&subject=${encodeURIComponent(subject)}&term=1`)).value;
   assert(record.published,subject+': nothing published');published[subject]=record.published;
   check(subject+': Week 13 published after keyboard-only authoring');

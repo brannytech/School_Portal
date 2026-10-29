@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 const target='public/vendor';fs.mkdirSync(target,{recursive:true});
-const result=await build({entryPoints:{'studio-editor':'client/studio-editor.js','math-render':'client/math-render.js','math-input':'client/math-input.js'},outdir:target,bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true,legalComments:'eof',logLevel:'warning',metafile:true});
+const result=await build({entryPoints:{'studio-editor':'client/studio-editor.js','lesson-editor':'client/lesson-editor.js','math-render':'client/math-render.js','math-input':'client/math-input.js'},outdir:target,bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true,legalComments:'eof',logLevel:'warning',metafile:true});
 fs.copyFileSync('node_modules/katex/dist/katex.min.css',path.join(target,'katex.min.css'));
 fs.cpSync('node_modules/katex/dist/fonts',path.join(target,'fonts'),{recursive:true});
 fs.cpSync('node_modules/mathlive/fonts',path.join(target,'mathlive-fonts'),{recursive:true});

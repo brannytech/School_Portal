@@ -110,6 +110,9 @@ export async function weeklyContentApi(x){
   const allIds=(input.lessons||[]).map(l=>l.id).filter(Boolean);const targets=new Set(Array.isArray(b.release?.lessons)&&b.release.lessons.length?b.release.lessons:allIds);
   const week=prepareWeek(input,fail,targets);
   for(const lesson of week.lessons)for(const block of lesson.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==c||f.subject!==s||f.sessionId!==ctx.sessionId)fail(400,`${lesson.title}: an image is missing or belongs to another class. Insert it again.`);}
+  // Adding to a published week: subtopics the teacher did not choose keep their live content; their edits stay in the private draft.
+  const pendingEdits=[];
+  if(existing)week.lessons=week.lessons.map(l=>{if(targets.has(l.id))return l;const old=existing.lessons.find(v=>v.id===l.id);if(!old)return l;const kept={...old,order:l.order};if(contentRevision(kept)!==contentRevision(l))pendingEdits.push(l.id);return kept;});
   const previousIds=new Set((existing?.lessons||[]).map(l=>l.id));const legacyOpen=new Set((existing?.lessons||[]).filter(l=>releaseState(c,s,t,l.id,scopeKey).available).map(l=>l.id));
   if(!Array.isArray(b.assignments)||b.assignments.length>30)fail(400,'Add up to 30 assignments.');
   const prepared=b.assignments.map(a=>{const previous=a.id?db.assignments.find(v=>v.id===a.id&&fits(v)&&Number(v.week)===week.id):null;if(a.id&&!previous)fail(400,'An assignment does not belong to this week.');return prepareAssignment({...a,week:week.id},ctx,u.id,fail,previous);});
@@ -127,7 +130,7 @@ export async function weeklyContentApi(x){
   }
   const keep=new Set(week.lessons.map(l=>l.id));db.releases=db.releases.filter(r=>!fits(r)||Number(String(r.lesson).split('-')[0])!==week.id||keep.has(r.lesson));
   for(const a of prepared){const index=db.assignments.findIndex(v=>v.id===a.id);if(index<0)db.assignments.push(a);else db.assignments[index]=a;}
-  delete db.weekDrafts?.[key+'|'+week.id];audit(u,`Published weekly template ${week.id} for ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({published:true,week:week.id,revision:contentRevision(week),draftRevision:null,released:[...targets].filter(id=>keep.has(id)),mode:release.mode,warnings:releaseWarnings(week,targets)});return true;
+  let nextDraft=null;if(pendingEdits.length){nextDraft=randomUUID();db.weekDrafts??={};db.weekDrafts[key+'|'+week.id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextDraft,baseRevision:contentRevision(week),assignments:b.assignments||[]};}else delete db.weekDrafts?.[key+'|'+week.id];audit(u,`Published weekly template ${week.id} for ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({published:true,week:week.id,revision:contentRevision(week),draftRevision:nextDraft,pendingEdits,released:[...targets].filter(id=>keep.has(id)),mode:release.mode,warnings:releaseWarnings(week,targets)});return true;
  }
  if(endpoint==='assignment-save'&&method==='POST'){
   staff();const previous=b.id?db.assignments.find(a=>a.id===b.id&&fits(a)):null;if(b.id&&!previous)fail(404,'Assignment not found.');

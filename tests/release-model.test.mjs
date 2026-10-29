@@ -60,5 +60,18 @@ test('Publish releases chosen subtopics now, on a date, locked or as draft; miss
   x=(await req('weekly-template?week=12',null,teacher)).value;
   const empty=await req('weekly-template',{week:x.published,assignments:[],publish:true,revision:x.revision,draftRevision:x.draftRevision,release:{mode:'NOW',lessons:['12-c']}},teacher);
   assert.equal(empty.status,400);assert.match(empty.value.error,/needs a title and learning content/);
+
+  // Adding to a published week: edits to a live subtopic stay private until that subtopic is chosen.
+  x=(await req('weekly-template?week=12',null,teacher)).value;
+  const edited=structuredClone(x.published);edited.lessons.find(l=>l.id==='12-a').document=note('A rewritten first note.');
+  edited.lessons=edited.lessons.filter(l=>l.id!=='12-c');edited.lessons.push(lesson('d','Delta','A brand new subtopic.'));
+  const added=await req('weekly-template',{week:edited,assignments:[],publish:true,revision:x.revision,draftRevision:x.draftRevision,release:{mode:'NOW',lessons:['12-d']}},teacher);
+  assert.equal(added.status,200,JSON.stringify(added.value));assert.deepEqual(added.value.pendingEdits,['12-a']);
+  assert.equal(await canOpen('12-d'),true,'the new subtopic is live');
+  const live=(await req('lesson/12-a',null,student)).value;assert.equal(live.document.blocks[0].text,'First note.','students keep the previous live text');
+  const draft=(await req('weekly-template?week=12',null,teacher)).value;assert(draft.draft,'the rewrite is kept as a private draft');assert.equal(draft.draft.week.lessons.find(l=>l.id==='12-a').document.blocks[0].text,'A rewritten first note.');
+  const whole=await req('weekly-template',{week:draft.draft.week,assignments:[],publish:true,revision:draft.draft.baseRevision,draftRevision:draft.draftRevision,release:{mode:'NOW'}},teacher);
+  assert.equal(whole.status,200,JSON.stringify(whole.value));assert.deepEqual(whole.value.pendingEdits,[]);
+  assert.equal((await req('lesson/12-a',null,student)).value.document.blocks[0].text,'A rewritten first note.','publishing the whole week releases every edit');
  }finally{await new Promise(r=>{server.once('exit',r);server.kill();});}
 });

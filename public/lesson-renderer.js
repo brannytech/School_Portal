@@ -11,7 +11,7 @@ function rich(node){
  const tag={paragraph:'p',bulletList:'ul',orderedList:'ol',listItem:'li',blockquote:'blockquote',heading:'h'+node.attrs?.level}[node.type];
  return `<${tag}${node.attrs?.textAlign?` class="rich-align-${node.attrs.textAlign}"`:''}${node.type==='orderedList'&&node.attrs?.start?` start="${node.attrs.start}"`:''}${node.type==='orderedList'&&node.attrs?.type?` type="${node.attrs.type}"`:''}>${content}</${tag}>`;
 }
-function renderBlock(block,renderWidget){
+export function renderBlock(block,renderWidget){
  switch(block.type){
   case 'heading':return `<h${block.level}>${escape(block.text)}</h${block.level}>`;
   case 'paragraph':return paragraph(block.text);

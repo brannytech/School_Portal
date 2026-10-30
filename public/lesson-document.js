@@ -62,7 +62,8 @@ export function validateRichText(input){
  }
  return node(input);
 }
-export function validateLessonDocument(input){
+// lenient: a private draft may hold items that are still being filled in (an image waiting for its alternative text, an empty video link).
+export function validateLessonDocument(input,{lenient=false}={}){
  shape(input,['schemaVersion','blocks'],'Document');
  if(input.schemaVersion!==1)invalid('unsupported schema version.');
  if(!Array.isArray(input.blocks)||input.blocks.length>documentLimits.blocks)invalid('use at most '+documentLimits.blocks+' blocks.');
@@ -94,12 +95,12 @@ export function validateLessonDocument(input){
    if(!result.headers.length||result.headers.length>documentLimits.columns||!Array.isArray(block.rows)||block.rows.length>documentLimits.rows)invalid(label+' table must have 1–12 columns and at most 40 rows.');
    result.rows=block.rows.map(row=>{if(!Array.isArray(row)||row.length!==result.headers.length)invalid(label+' table rows must match its headers.');return row.map(cell=>text(cell,label+' cell',4000));});
   }
-  if(block.type==='video'){if(typeof block.videoId!=='string'||!/^[-\w]{11}$/.test(block.videoId))invalid(label+' needs a valid YouTube video ID.');result.videoId=block.videoId;}
+  if(block.type==='video'){if(!(lenient&&block.videoId===''))if(typeof block.videoId!=='string'||!/^[-\w]{11}$/.test(block.videoId))invalid(label+' needs a valid YouTube video ID.');result.videoId=block.videoId;}
   if(block.type==='image'){
-   if(typeof block.fileId!=='string'||!/^[-\w]{8,64}$/.test(block.fileId))invalid(label+' needs an uploaded image.');
+   if(!(lenient&&block.fileId===''))if(typeof block.fileId!=='string'||!/^[-\w]{8,64}$/.test(block.fileId))invalid(label+' needs an uploaded image.');
    result.fileId=block.fileId;result.decorative=block.decorative===true;
    result.alt=block.alt===undefined?'':text(block.alt,label+' alternative text',500);
-   if(!result.decorative&&!result.alt.trim())invalid(label+' needs alternative text describing the image, or mark it as decorative.');
+   if(!lenient&&!result.decorative&&!result.alt.trim())invalid(label+' needs alternative text describing the image, or mark it as decorative.');
    result.caption=block.caption===undefined?'':text(block.caption,label+' caption',1000);
    result.width=block.width===undefined?'medium':block.width;if(!['small','medium','full'].includes(result.width))invalid(label+' image width must be small, medium or full.');
    result.align=block.align===undefined?'center':block.align;if(!['left','center','right'].includes(result.align))invalid(label+' image alignment must be left, centre or right.');

@@ -32,14 +32,14 @@ export function mergeWeekContent(input,previous){
  if(Array.isArray(input.quiz))merged.quiz=input.quiz.map(q=>({...structuredClone(previous?.quiz?.find(v=>v.id===q.id)||{}),...q}));
  return merged;
 }
-export function validateWeekDocuments(week){
+export function validateWeekDocuments(week,{lenientFor=()=>false}={}){
  const fail=message=>{throw Object.assign(Error(message),{status:400});};
  if(!week||typeof week!=='object'||!Array.isArray(week.lessons)||week.lessons.length>30||!Array.isArray(week.quiz??[])||(week.quiz?.length||0)>100)fail('Provide a weekly lesson list (up to 30 subtopics) and quiz list (up to 100 questions).');
  for(const lesson of week.lessons){
   if(!lesson||typeof lesson!=='object'||Array.isArray(lesson))fail('Each subtopic must be an object.');
   for(const key of ['objectives','summary','questions'])if(lesson[key]!==undefined&&(!Array.isArray(lesson[key])||lesson[key].length>100))fail('Subtopic '+key+' must be a list of at most 100 entries.');
   for(const q of [...(lesson.questions||[]),...(lesson.example?[lesson.example]:[])])if(!q||typeof q!=='object'||Array.isArray(q)||q.options!==undefined&&!Array.isArray(q.options))fail('Questions need an object with a valid options list.');
-  if(lesson.document!==undefined){lesson.document=validateLessonDocument(lesson.document);validateDocumentMath(lesson.document);}
+  if(lesson.document!==undefined){lesson.document=validateLessonDocument(lesson.document,{lenient:lenientFor(lesson)});validateDocumentMath(lesson.document);}
  }
  for(const q of week.quiz||[])if(!q||typeof q!=='object'||Array.isArray(q)||q.options!==undefined&&!Array.isArray(q.options))fail('Quiz questions need an object with a valid options list.');
  return week;

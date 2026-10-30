@@ -58,7 +58,8 @@ Commit trailers: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` and
 
 ## 4. Remaining work, in order
 
-### Step A. Finish and verify Stage 3 (do this first)
+### Step A. Finish and verify Stage 3 — DONE (30 Oct 2026)
+All six items below are complete: `verify-studio-v2`, `verify-studio-interactive` (legacy lessons, graph/toolkit, history, 360px) and `verify-studio-a11y` (axe, keyboard, sizes) pass; `tests/studio-model.test.mjs` added; duplicate equation heading removed. Kept for reference:
 1. **Write `scripts/verify-studio-v2.mjs`** (replaces `verify-studio-flow.mjs`). Same Week 13 scenario for Mathematics, English Language and Physics in one workspace, using the new DOM (`.st-editor .tiptap`, `[data-studio="insert"]`, `.st-insert`, `.studio-slash`, `[data-inspector]`). For every inserted item (equation, inline equation, graph, table, video, worked example, hint/warning, real-life, objectives, image, divider) assert the caret ends where expected and typing continues on the next line, including inserting mid-sentence (text splits, caret at start of second half). Then Publish (dialog: `[data-studio="publish"]` then `[data-studio="publish-confirm"]`), read each note as a student, and check order of blocks. Add an image: upload a generated PNG through the file chooser, fill alt text, publish, confirm the student page shows `<img alt=...>` and the `/api/media/...` request returns 200 for the student and 404 before release.
 2. Fix cosmetic duplicate heading "EQUATION" in the settings panel (inspector head + equation panel head).
 3. Port or delete the old block-card scripts: `verify-studio-ribbon.mjs`, `verify-studio-usability.mjs`, `verify-studio-browser.mjs`, `verify-interactive-browser.mjs` (graph/toolkit authoring and student preview), `verify-lesson-browser.mjs` (legacy lessons open in the editor). Keep the behaviours they check (legacy lesson opens and edits, graph author works, preview at 360/768 px, history restore, version conflict, mobile widths). Update `package.json` script names and `scripts/check-build.mjs`.
@@ -99,8 +100,8 @@ Acceptance: all browser scripts pass, `npm test` green, screenshots reviewed at 
 7. Student: open the lesson, image has alt text, equation renders, phone width (360 px) is usable.
 
 ## 6. Known issues and decisions to revisit
-- Old browser scripts are out of date until Step A3.
+- Browser scripts: `verify-studio-v2`, `verify-studio-interactive`, `verify-studio-a11y` (old block-card scripts removed).
 - `questions.js` is a straight port of the old simple panel until Step B.
 - Callout items (hint, warning, real-life, experiment, objectives, summary) are settings-panel items, not inline-editable text. Make them inline-editable only if teachers ask.
-- Equation settings panel has its own title row (cosmetic duplicate).
+- verify-studio-v2 had one flaky run (bold selection); the assertion now waits instead of checking instantly.
 - The 401 in the browser console before sign-in is the normal "not signed in" check.

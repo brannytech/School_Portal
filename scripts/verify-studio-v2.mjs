@@ -141,7 +141,7 @@ const notes={
   // Toolbar buttons never steal the caret: bold a selection and keep typing.
   await page.keyboard.press('End');await type(page,' Bold me');for(let i=0;i<7;i++)await page.keyboard.press('Shift+ArrowLeft');
   await page.locator('[data-studio="text-bold"]').click();assert((await caret(page)).focused,'bold: focus stays in the page');await page.keyboard.press('End');await type(page,' and carry on.');
-  assert(await editor(page).locator('strong').filter({hasText:'Bold me'}).count(),'the selection is bold');check('English: toolbar formatting keeps the caret in the page and typing continues');
+  await editor(page).locator('strong').filter({hasText:'Bold me'}).first().waitFor({timeout:5000});check('English: toolbar formatting keeps the caret in the page and typing continues');
   // An image: choose a file, describe it, and carry on writing below it.
   await page.keyboard.press('Enter');
   const [chooser]=await Promise.all([page.waitForEvent('filechooser'),page.locator('.st-insert summary').click().then(()=>page.locator('[data-studio="insert"][data-type="image"]').click())]);await chooser.setFiles(PNG);

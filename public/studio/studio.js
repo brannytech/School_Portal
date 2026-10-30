@@ -233,7 +233,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    el.innerHTML=blockInspectorHTML(block,{canMoveUp:true,canMoveDown:true});
    if(block.type==='equation'){
     const id=block.id;
-    const mounted=await mountEquationPanel(el.querySelector('[data-eq-host]'),{latex:block.latex,title:'Equation',applyLabel:'Update equation',focus,onApply:latex=>{const b=editorModule.getBlock(s.editor,id);if(b){editorModule.updateBlock(s.editor,{...b,latex});}continueWriting();},onCancel:continueWriting});
+    const mounted=await mountEquationPanel(el.querySelector('[data-eq-host]'),{latex:block.latex,title:'',applyLabel:'Update equation',focus,onApply:latex=>{const b=editorModule.getBlock(s.editor,id);if(b){editorModule.updateBlock(s.editor,{...b,latex});}continueWriting();},onCancel:continueWriting});
     if(stale())mounted.destroy();else s.eqPanel=mounted;
    }else if(['graph','math-tool'].includes(block.type)){
     const host2=el.querySelector('[data-math-author]'),id=block.id;

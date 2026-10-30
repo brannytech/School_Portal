@@ -8,7 +8,7 @@ const b=(action,label,extra='')=>`<button type="button" data-eq="${action}" ${ex
 // Mounts the editor in `container`. onApply(latex) receives valid LaTeX; onCancel() closes without change.
 export async function mountEquationPanel(container,{latex='',title='Equation',applyLabel='Insert equation',focus=true,onApply,onCancel}){
  let current=latex,valid=true,gone=false,mathModule=null,field=null;
- container.innerHTML=`<div class="st-inspector-head"><h3>${esc(title)}</h3>${b('cancel','Close')}</div>
+ container.innerHTML=`${title?`<div class="st-inspector-head"><h3>${esc(title)}</h3>${b('cancel','Close')}</div>`:''}
  <div class="st-actions st-symbols">${SYMBOL_LABELS.map(([key,label])=>b('symbol',label,`data-symbol="${key}"`)).join('')}</div>
  <label>Editing mode<select data-eq-mode><option value="visual">Visual editor</option><option value="source">LaTeX source</option></select></label>
  <div data-eq-visual><p role="status">Loading visual equation editor…</p></div>

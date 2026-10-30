@@ -22,8 +22,18 @@ export function closingOpen(week,c,s,t,releaseState,scopeKey){return !!week?.les
 
 function question(input,id,fail){
  const q={...input,id:clean(input?.id,100)||randomUUID(),prompt:clean(input?.prompt),kind:input?.kind||'short',answer:clean(input?.answer,2000),explanation:clean(input?.explanation),stage:input?.stage||'practice',difficulty:input?.difficulty||'Beginner'};
- if(!q.prompt||!q.answer||!q.explanation||!['numeric','choice','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind))fail(400,'Every question needs a prompt, answer, answer type and explanation.');
+ if(!q.prompt||(!q.answer&&q.kind!=='multi')||!q.explanation||!['numeric','choice','multi','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind))fail(400,'Every question needs a prompt, answer, answer type and explanation.');
  if(q.kind==='choice'){q.options=(input.options||[]).map(v=>clean(v,1000));if(q.options.length<2||!q.options.includes(q.answer))fail(400,'Multiple-choice answers must match one of at least two options.');}
+ if(q.kind!=='multi')delete q.answers;
+ if(q.kind==='multi'){
+  q.options=(input.options||[]).map(v=>clean(v,1000));q.answers=(Array.isArray(input.answers)?input.answers:String(input.answer||'').split('|')).map(v=>clean(v,1000)).filter(Boolean);
+  if(q.options.length<2||q.options.some(v=>v.includes('|')))fail(400,'Multiple-answer questions need at least two choices, and a choice cannot contain the | character.');
+  if(!q.answers.length||q.answers.some(v=>!q.options.includes(v)))fail(400,'Choose at least one correct answer, from the listed choices.');
+  q.answer=q.answers.join('|');
+ }
+ if(Array.isArray(input.accepted)&&q.kind!=='multi'&&q.kind!=='choice'&&q.kind!=='boolean'){q.accepted=input.accepted.map(v=>clean(v,500)).filter(Boolean).slice(0,20);if(!q.accepted.length)delete q.accepted;}
+ if(input.marks!==undefined){const marks=Number(input.marks);if(!Number.isFinite(marks)||marks<=0||marks>100)fail(400,'Marks must be a number from 1 to 100.');q.marks=Math.round(marks*100)/100;}
+ if(input.hint!==undefined)q.hint=clean(input.hint,1000);
  if(q.kind==='boolean'&&!['true','false'].includes(q.answer.toLowerCase()))fail(400,'True/false answers must be true or false.');
  if(Array.isArray(input.variables))q.variables=input.variables.map(v=>clean(v,30));if(Number.isFinite(input.tolerance)&&input.tolerance>=0)q.tolerance=input.tolerance;
  return q;

@@ -69,7 +69,10 @@ All six items below are complete: `verify-studio-v2`, `verify-studio-interactive
 
 Acceptance: all browser scripts pass, `npm test` green, screenshots reviewed at 1440, 1024 and 360 px.
 
-### Step B. Stage 5: question authoring v2 (`public/studio/questions.js` + server `question()` in `weekly-content.mjs`)
+### Step B. Stage 5: question authoring v2 — DONE (30 Oct 2026)
+Implemented: `multi` kind (several correct answers, sent as `a|b`), `accepted` alternative answers, tolerance, marks (marks-weighted `gradeAssessment`), hint, difficulty, duplicate / reorder, CSV import (`questionsFromCSV`), formulas in prompts and choices as `$latex$`, student checkbox UI in practice, weekly quiz and assessments. Tests: `tests/question-authoring.test.mjs`, `scripts/verify-questions.mjs`.
+Not done (decided to keep prompts plain text with `$…$` maths instead of a second TipTap editor): images inside question prompts, `promptDoc`, a live formula preview while typing. Add them later if teachers ask; images would need `/api/media` to authorise images used by released questions.
+Original brief, for reference:
 - Question prompt is rich: a small TipTap editor (reuse `createLessonEditor` options or a lighter bundle) supporting inline equations and images. Store as `promptDoc` (rich-text doc) alongside plain `prompt` text for search and old clients; student UI renders `promptDoc` when present.
 - Kinds: single choice (radio), multiple correct answers (checkbox, `answers: []`), numeric with tolerance (`tolerance`, units optional), short answer with several accepted answers, fill in the blank, true/false, expression.
 - Per question: marks, hint, difficulty, explanation (rich), optional image.

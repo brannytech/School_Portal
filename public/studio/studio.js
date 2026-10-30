@@ -7,7 +7,7 @@ import {esc,button,input} from './ui.js';
 import {blockInspectorHTML,lessonSettingsHTML,applyBlockEdit} from './inspector.js';
 import {mountEquationPanel} from './equation.js';
 import {lessonName,releaseLabel,publishedMessage,reviewHTML,publishDialog,defaultSelection} from './publish.js';
-import {questionPanelHTML,newQuestion,practiceOf} from './questions.js';
+import {questionPanelHTML,newQuestion,practiceOf,answerInput,questionsFromCSV} from './questions.js';
 import {pickImageFile,uploadLessonImage} from './media.js';
 
 // What can be added to a lesson. `input` items open their settings straight away.
@@ -295,8 +295,31 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  const questionList=prefix=>prefix==='quiz'?s.week.quiz:practiceOf(current());
  function writeQuestion(path,value){
   const parts=path.split('.'),prefix=parts[0],key=parts[1],item=questionList(prefix)[prefix==='quiz'?s.quizIndex:s.questionIndex];if(!item)return;
-  item[key]=key==='options'?value.split('\n'):value;changed();
-  if(key==='options'){const answer=q(`[data-path="${prefix}.answer"]`);if(answer){const wrapper=document.createElement('div');wrapper.innerHTML=questionPanelHTML({questions:[item],index:0,quiz:prefix==='quiz'});const fresh=wrapper.querySelector(`[data-path="${prefix}.answer"]`);if(fresh)answer.innerHTML=fresh.innerHTML;}}
+  if(key==='options'||key==='accepted')item[key]=value.split('\n');
+  else if(key==='answers'){item.answers=[...host.querySelectorAll(`[data-path="${prefix}.answers"]:checked`)].map(e=>e.value);item.answer=item.answers.join('|');}
+  else if(key==='marks'||key==='tolerance'){if(value===''||!Number.isFinite(Number(value)))delete item[key];else item[key]=Number(value);}
+  else item[key]=value;
+  changed();
+  if(key==='options'){const wrap=q(`[data-answer-wrap="${prefix}"]`);if(wrap){if(item.kind==='multi')item.answers=(item.answers||[]).filter(v=>(item.options||[]).includes(v));wrap.innerHTML=answerInput(item,prefix);}}
+ }
+ function moveQuestion(prefix,by){
+  const list=questionList(prefix),field=prefix==='quiz'?'quizIndex':'questionIndex',from=s[field],to=from+by;if(to<0||to>=list.length)return;
+  if(prefix==='quiz'){[s.week.quiz[from],s.week.quiz[to]]=[s.week.quiz[to],s.week.quiz[from]];}
+  else{const lesson=current(),a=list[from],b=list[to],ia=lesson.questions.indexOf(a),ib=lesson.questions.indexOf(b);lesson.questions[ia]=b;lesson.questions[ib]=a;}
+  s[field]=to;changed();refreshQuestions();
+ }
+ function duplicateQuestion(prefix){
+  const list=questionList(prefix),field=prefix==='quiz'?'quizIndex':'questionIndex',item=list[s[field]];if(!item)return;
+  const copy={...structuredClone(item),id:uid()};
+  if(prefix==='quiz')s.week.quiz.splice(s[field]+1,0,copy);else{const lesson=current();lesson.questions.splice(lesson.questions.indexOf(item)+1,0,copy);}
+  s[field]+=1;changed();refreshQuestions();
+ }
+ function importQuestions(prefix){
+  const box=q(`[data-csv="${prefix}"]`),report=q(`[data-csv-report="${prefix}"]`);if(!box||!report)return;
+  const {questions,errors}=questionsFromCSV(box.value,{stage:prefix==='quiz'?'quiz':'practice',makeId:uid});
+  if(questions.length){if(prefix==='quiz')s.week.quiz.push(...questions);else current().questions.push(...questions);s[prefix==='quiz'?'quizIndex':'questionIndex']=questionList(prefix).length-1;changed();refreshQuestions();}
+  const after=q(`[data-csv-report="${prefix}"]`);
+  if(after){after.textContent=`${questions.length} question${questions.length===1?'':'s'} imported.${errors.length?' Not imported: '+errors.join(' '):''}`;const d=after.closest('details');if(d)d.open=true;}
  }
  function refreshQuestions(){renderMain();renderOutline();updateReadiness();}
 
@@ -370,6 +393,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    else if(action==='add-practice'){const lesson=current();lesson.questions.push(newQuestion(uid()));s.questionIndex=practiceOf(lesson).length-1;changed();refreshQuestions();}
    else if(action==='add-quiz'){s.week.quiz.push(newQuestion(uid(),'quiz'));s.quizIndex=s.week.quiz.length-1;changed();refreshQuestions();}
    else if(action==='remove-practice'){const lesson=current(),item=practiceOf(lesson)[s.questionIndex];lesson.questions=lesson.questions.filter(v=>v!==item);s.questionIndex=Math.max(0,s.questionIndex-1);changed();refreshQuestions();}
+   else if(/^(duplicate|up|down|import)-(practice|quiz)$/.test(action)){const [verb,prefix]=action.split('-');if(verb==='duplicate')duplicateQuestion(prefix);else if(verb==='import')importQuestions(prefix);else moveQuestion(prefix,verb==='up'?-1:1);}
    else if(action==='remove-quiz'){s.week.quiz.splice(s.quizIndex,1);s.quizIndex=Math.max(0,s.quizIndex-1);changed();refreshQuestions();}
    else if(action==='fix-issue')goToIssue(s.issues?.[Number(target.dataset.issue)]);
   }catch(error){status(error.message);}
@@ -403,7 +427,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   else if(el.matches('[data-publish-mode]')&&s.publish){s.publish.mode=el.value;renderPublish();}
   else if(el.matches('[data-preview-width]'))q('.studio-preview').style.width=el.value;
   else if(el.dataset.bank){s[el.dataset.bank==='quiz'?'quizIndex':'questionIndex']=Number(el.value);refreshQuestions();}
-  else if(el.dataset.questionKind){const item=questionList(el.dataset.questionKind)[el.dataset.questionKind==='quiz'?s.quizIndex:s.questionIndex];item.kind=el.value;if(item.kind==='choice')item.options??=['',''];changed();refreshQuestions();}
+  else if(el.dataset.questionKind){const item=questionList(el.dataset.questionKind)[el.dataset.questionKind==='quiz'?s.quizIndex:s.questionIndex];item.kind=el.value;if(item.kind==='choice'||item.kind==='multi')item.options??=['',''];if(item.kind==='multi'){item.answers=[];item.answer='';}else delete item.answers;changed();refreshQuestions();}
   else if(el.id==='studio-heading'&&s.editor){if(el.value==='0')s.editor.chain().focus().setParagraph().run();else s.editor.chain().focus().setHeading({level:Number(el.value)}).run();focusEditor();}
   else if(el.id==='studio-align'&&s.editor){s.editor.chain().focus().setTextAlign(el.value).run();focusEditor();}
   else if(el.matches('[data-load-week]')){/* opened with the Open button */}

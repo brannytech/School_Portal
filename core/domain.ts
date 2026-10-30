@@ -3,8 +3,8 @@ export type AccountStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' |
 export type ReleaseStatus = 'DRAFT' | 'SCHEDULED' | 'LOCKED' | 'UNLOCKED' | 'ARCHIVED';
 export interface Question {
   id: string; prompt: string; answer: string; explanation: string;
-  kind: 'numeric' | 'choice' | 'boolean' | 'short' | 'fill' | 'matching' | 'steps' | 'graph' | 'expression';
-  tolerance?: number; variables?: string[]; options?: string[];
+  kind: 'numeric' | 'choice' | 'multi' | 'boolean' | 'short' | 'fill' | 'matching' | 'steps' | 'graph' | 'expression';
+  tolerance?: number; accepted?: string[]; answers?: string[]; marks?: number; variables?: string[]; options?: string[];
   difficulty?: string; stage?: 'diagnostic' | 'practice' | 'application' | 'quiz';
 }
 export interface MasteryPolicy { developing: number; proficient: number; mastered: number; completion: number; noteMaximum: number; noteIncludedInCA: boolean; }
@@ -23,9 +23,20 @@ export function calculate(expression:string,variables:Record<string,number>={}):
   function expressionAt(min:number):number {let left=atom();while(index<tokens.length){const op=tokens[index]!,precedence=op==='+'||op==='-'?1:op==='*'||op==='/'?2:op==='^'?3:0;if(!precedence||precedence<min)break;index++;const right=expressionAt(precedence+(op==='^'?0:1));left=op==='+'?left+right:op==='-'?left-right:op==='*'?left*right:op==='/'?left/right:Math.pow(left,right);}return left;}
   const result=expressionAt(0);if(index!==tokens.length||!Number.isFinite(result)||Math.abs(result)>1e100)throw Error('This expression is undefined or outside the calculator range.');return result;
 }
+// Several correct choices are sent as one text value joined with "|" (or as an array).
+export const MULTI_SEPARATOR='|';
+export function answerParts(value:unknown):string[] {
+  const list=Array.isArray(value)?value:String(value??'').split(MULTI_SEPARATOR);
+  return [...new Set(list.map(normaliseAnswer).filter(Boolean))].sort();
+}
 export function checkAnswer(question:Question,response:unknown):boolean {
+  if(question.kind==='multi'){
+    const given=answerParts(response),expected=answerParts(question.answers?.length?question.answers:question.answer);
+    return given.length>0&&given.length===expected.length&&given.every((v,i)=>v===expected[i]);
+  }
   const answer=normaliseAnswer(response),expected=normaliseAnswer(question.answer);
   if(!answer)return false;if(answer===expected)return true;
+  if(question.accepted?.some(v=>normaliseAnswer(v)===answer))return true;
   if(['short','choice','boolean','matching','steps','fill'].includes(question.kind))return false;
   const tolerance=question.tolerance??0.00001;
   if(question.kind==='expression'){
@@ -37,5 +48,8 @@ export function checkAnswer(question:Question,response:unknown):boolean {
 }
 export function gradeAssessment(questions:Question[],answers:Record<string,unknown>){
   const results=questions.map(q=>({question:q.id,correct:checkAnswer(q,answers[q.id]),answer:q.answer,explanation:q.explanation}));
-  const correct=results.filter(r=>r.correct).length;return {correct,total:questions.length,percentage:questions.length?Math.round(correct/questions.length*100):0,results};
+  const marksOf=(q:Question)=>Number.isFinite(q.marks)&&(q.marks as number)>0?(q.marks as number):1;
+  const correct=results.filter(r=>r.correct).length,possible=questions.reduce((sum,q)=>sum+marksOf(q),0);
+  const earned=questions.reduce((sum,q,i)=>sum+(results[i]!.correct?marksOf(q):0),0);
+  return {correct,total:questions.length,marks:earned,possibleMarks:possible,percentage:possible?Math.round(earned/possible*100):0,results};
 }

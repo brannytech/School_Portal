@@ -243,7 +243,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
      if(block.type==='graph')module.mountGraphAuthor(host2,block.graph,update);else module.mountToolAuthor(host2,block.config,update);
      if(focus){host2.querySelector('input,select')?.focus();}
     }).catch(error=>{if(host2.isConnected)host2.textContent=error.message;});
-   }else if(focus){el.querySelector('[data-item-editor] [data-path],[data-item-editor] button')?.focus();}
+   }else if(focus){(block.type==='image'&&el.querySelector('[data-path="block.alt"]')||el.querySelector('[data-item-editor] [data-path],[data-item-editor] button'))?.focus();}
    void ids;return;
   }
   const lesson=current();

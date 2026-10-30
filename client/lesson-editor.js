@@ -38,7 +38,7 @@ export function insertBlock(editor,block,{select=false}={}){
    if(parent.content.size===0){atomPos=$from.before();tr.replaceWith(atomPos,$from.after(),item);}
    else if($from.parentOffset===parent.content.size){atomPos=$from.after();tr.insert(atomPos,item);}
    else if($from.parentOffset===0){atomPos=$from.before();tr.insert(atomPos,item);}
-   else{const at=selection.from;tr.split(at);atomPos=tr.doc.resolve(at+1).before();tr.insert(atomPos,item);}
+   else{const at=selection.from;tr.split(at);atomPos=at+1;tr.insert(atomPos,item);}
   }else{atomPos=$from.depth>=1?$from.after(1):tr.doc.content.size;tr.insert(atomPos,item);}
  }
  const afterPos=atomPos+item.nodeSize;

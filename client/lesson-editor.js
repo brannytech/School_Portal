@@ -49,10 +49,19 @@ export function insertBlock(editor,block,{select=false}={}){
  return {pos:atomPos,afterPos};
 }
 
+// Put the caret on the line after an item (creating it if needed): the "continue writing" move.
+export function continueAfter(editor,id){
+ const hit=findBlock(editor.state.doc,id);if(!hit)return false;
+ const {view,state}=editor,after=hit.pos+hit.node.nodeSize;let tr=state.tr;
+ if(tr.doc.nodeAt(after)?.type!==state.schema.nodes.paragraph)tr=tr.insert(after,state.schema.nodes.paragraph.create());
+ view.dispatch(tr.setSelection(TextSelection.create(tr.doc,after+1)).scrollIntoView());view.focus();return true;
+}
 export function updateBlock(editor,block){
  const hit=findBlock(editor.state.doc,block.id);if(!hit)return false;
  const {view,state}=editor;view.dispatch(state.tr.setNodeMarkup(hit.pos,undefined,{block}));return true;
 }
+export function getBlock(editor,id){return findBlock(editor.state.doc,id)?.node.attrs.block||null;}
+export function blockIds(editor){const ids=[];editor.state.doc.descendants(node=>{if(node.type.name==='lessonBlock')ids.push(node.attrs.block.id);});return ids;}
 export function selectBlock(editor,id){
  const hit=findBlock(editor.state.doc,id);if(!hit)return false;
  const {view,state}=editor;view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc,hit.pos)).scrollIntoView());return true;
@@ -78,7 +87,7 @@ export function moveBlock(editor,id,direction){
  const newPos=direction<0?start:start+second.nodeSize;view.dispatch(tr.setSelection(NodeSelection.create(tr.doc,newPos)).scrollIntoView());return true;
 }
 
-export function createLessonEditor({element,content,renderBlock,onChange,onSelect,onEquation,onFiles,slashItems=[],onSlash}){
+export function createLessonEditor({element,content,renderBlock,onPaint,onChange,onSelect,onEquation,onFiles,slashItems=[],onSlash}){
  const LessonBlock=Node.create({
   name:'lessonBlock',group:'block',atom:true,selectable:true,draggable:true,
   addAttributes(){return {block:{default:null}};},
@@ -87,7 +96,7 @@ export function createLessonEditor({element,content,renderBlock,onChange,onSelec
   addNodeView(){return ({node})=>{
    const dom=document.createElement('div');dom.className='lesson-item';dom.contentEditable='false';
    let current=node.attrs.block;
-   const paint=()=>{dom.dataset.type=current.type;dom.dataset.blockId=current.id;dom.innerHTML=renderBlock(current);};
+   const paint=()=>{dom.dataset.type=current.type;dom.dataset.blockId=current.id;dom.innerHTML=renderBlock(current);onPaint?.(dom);};
    paint();
    return {dom,update(next){if(next.type.name!=='lessonBlock')return false;if(!sameBlock(next.attrs.block,current)){current=next.attrs.block;paint();}return true;},selectNode(){dom.classList.add('is-selected');},deselectNode(){dom.classList.remove('is-selected');},stopEvent(){return false;},ignoreMutation(){return true;}};
   };}

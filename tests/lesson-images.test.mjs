@@ -43,5 +43,14 @@ test('Lesson images: teachers upload, alt text is required, students see only im
   const shown=await raw('media/'+id,{session:student});assert.equal(shown.status,200);assert.equal(shown.headers.get('content-type'),'image/png');assert.match(shown.headers.get('cache-control'),/private/);
   const lesson=(await req('lesson/14-a',null,student)).value;assert.equal(lesson.document.blocks[0].type,'image');assert.equal(lesson.document.blocks[0].alt,'A red square');
   assert.equal((await raw('media/'+id)).status,401,'anonymous visitors are refused');
+
+  // A private draft may keep an image that still lacks its alternative text, and a half-finished subtopic never blocks another.
+  const two=blocks=>({id:14,title:'Images',lessons:[{id:'14-a',title:'Pictures',minutes:10,document:{schemaVersion:1,blocks:[{id:'t1',type:'paragraph',text:'Done.'}]},questions:[]},{id:'14-b',title:'Later',minutes:10,document:{schemaVersion:1,blocks},questions:[]}],quiz:[]});
+  const latest=async()=>(await req('weekly-template?week=14',null,teacher)).value;
+  let y=await latest();
+  let d=await req('weekly-template',{week:two([image({id:'img2',alt:''}),{id:'v1',type:'video',videoId:''}]),assignments:[],publish:false,revision:y.revision,draftRevision:y.draftRevision},teacher);assert.equal(d.status,200,JSON.stringify(d.value));
+  y=await latest();
+  d=await req('weekly-template',{week:y.draft.week,assignments:[],publish:true,revision:y.draft.baseRevision,draftRevision:y.draftRevision,release:{mode:'NOW',lessons:['14-b']}},teacher);assert.equal(d.status,400,'the unfinished subtopic cannot be published');
+  d=await req('weekly-template',{week:y.draft.week,assignments:[],publish:true,revision:y.draft.baseRevision,draftRevision:y.draftRevision,release:{mode:'NOW',lessons:['14-a']}},teacher);assert.equal(d.status,200,JSON.stringify(d.value));
  }finally{await new Promise(r=>{server.once('exit',r);server.kill();});}
 });

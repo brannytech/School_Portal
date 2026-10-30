@@ -100,16 +100,18 @@ export async function weeklyContentApi(x){
   const draft=db.weekDrafts?.[key+'|'+id],revision=contentRevision(existing),draftRevision=draft?.revision||draft?.savedAt||null;
   if((b.revision??null)!==revision)fail(409,'This week was changed by another teacher. Reload it before saving.');
   if((b.draftRevision??null)!==draftRevision)fail(409,'This draft was changed in another window. Reload it before saving.');
-  validateWeekDocuments(b.week);
+  const wanted=Array.isArray(b.release?.lessons)&&b.release.lessons.length?new Set(b.release.lessons):null;
+  const lenient=lesson=>b.publish!==true||(!!wanted&&!wanted.has(lesson.id));
+  validateWeekDocuments(b.week,{lenientFor:lenient});
   if(b.assignments!==undefined&&(!Array.isArray(b.assignments)||b.assignments.length>30))fail(400,'Add up to 30 assignments.');
   // Inherit from the published source, not an abandoned draft: "Load published
   // version" must be able to discard blocks introduced only in that draft.
   const input=mergeWeekContent(b.week,existing);
-  validateWeekDocuments(input);assignDraftIds(input);
+  validateWeekDocuments(input,{lenientFor:lenient});assignDraftIds(input);
   if(b.publish!==true){db.weekDrafts??={};const nextRevision=randomUUID();db.weekDrafts[key+'|'+id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextRevision,baseRevision:revision,assignments:b.assignments||[]};await save();json({saved:true,published:false,week:input,revision,draftRevision:nextRevision});return true;}
   const allIds=(input.lessons||[]).map(l=>l.id).filter(Boolean);const targets=new Set(Array.isArray(b.release?.lessons)&&b.release.lessons.length?b.release.lessons:allIds);
   const week=prepareWeek(input,fail,targets);
-  for(const lesson of week.lessons)for(const block of lesson.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==c||f.subject!==s||f.sessionId!==ctx.sessionId)fail(400,`${lesson.title}: an image is missing or belongs to another class. Insert it again.`);}
+  for(const lesson of week.lessons)if(targets.has(lesson.id))for(const block of lesson.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==c||f.subject!==s||f.sessionId!==ctx.sessionId)fail(400,`${lesson.title}: an image is missing or belongs to another class. Insert it again.`);}
   // Adding to a published week: subtopics the teacher did not choose keep their live content; their edits stay in the private draft.
   const pendingEdits=[];
   if(existing)week.lessons=week.lessons.map(l=>{if(targets.has(l.id))return l;const old=existing.lessons.find(v=>v.id===l.id);if(!old)return l;const kept={...old,order:l.order};if(contentRevision(kept)!==contentRevision(l))pendingEdits.push(l.id);return kept;});

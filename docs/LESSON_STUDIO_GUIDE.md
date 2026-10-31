@@ -14,6 +14,10 @@ Lesson Studio is the one place where teachers write weeks, lessons, practice que
 
 ![Publish dialog](images/03-publish-dialog.png)
 
+## Small windows and laptops
+- On a window narrower than about 1100px the outline and settings collapse so the page uses the whole screen. Use **☰ Outline** and **⚙ Settings** in the header to open them over the page; **Esc** or a tap outside closes them. Choosing a subtopic closes the outline, and adding an equation or image opens settings so you can fill them in.
+- The `/` menu opens above the line when there is no room below, and always fits inside the window.
+
 ## Questions (practice and quiz)
 - Kinds: multiple choice, short answer, numeric (with tolerance), multi-part (several answers) and true/false.
 - Each question has marks, difficulty, a hint and accepted alternative answers. Write maths inline as `$x^2+1$`.

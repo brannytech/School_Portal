@@ -44,6 +44,14 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
 
  const call=(route,data)=>data?api(route,{...context,...data}):api(route+(route.includes('?')?'&':'?')+new URLSearchParams(context));
  const q=selector=>host.querySelector(selector);
+ // On a small window the outline and settings become drawers, so the page keeps the whole screen.
+ const narrow=()=>window.matchMedia('(max-width:1100px)').matches;
+ function setDrawer(name,{focus=false}={}){
+  s.drawer=name||'';const shell=q('.st-shell');if(!shell)return;
+  if(name)shell.dataset.drawer=name;else delete shell.dataset.drawer;
+  for(const b of host.querySelectorAll('[data-studio^="drawer-"][aria-expanded]'))b.setAttribute('aria-expanded',String(b.dataset.studio==='drawer-'+name));
+  if(name&&focus)q(name==='outline'?'[data-outline]':'[data-inspector]')?.focus({preventScroll:true});
+ }
  const current=()=>s.week?.lessons.find(l=>l.id===s.lessonId)||null;
  const currentAssignment=()=>s.assignments.find(a=>a.id===s.assignmentId)||null;
  // The page editor writes into whichever item is open: a subtopic or an assignment.
@@ -182,10 +190,10 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   if(!host.open)host.showModal();
  }
  function shellHTML(){
-  return `<div class="st-shell"><header class="st-top"><div class="st-brand"><span class="st-mark" aria-hidden="true">L</span><div><h2>Lesson Studio</h2><span class="studio-context" data-context></span></div></div>
+  return `<div class="st-shell"><header class="st-top"><button type="button" class="st-drawer-btn" data-studio="drawer-outline" aria-expanded="false" aria-controls="st-outline" aria-label="Show outline">☰<span> Outline</span></button><div class="st-brand"><span class="st-mark" aria-hidden="true">L</span><div><h2>Lesson Studio</h2><span class="studio-context" data-context></span></div></div>
   <div class="st-state"><span data-studio-status role="status" aria-live="polite"></span><span class="st-ready" data-readiness role="status"></span></div>
-  <div class="st-top-actions">${button('save','Save draft')}${button('preview','Preview','aria-label="Student preview"')}${button('publish','Publish','class="primary"')}${button('close','✕','aria-label="Close Lesson Studio"')}</div></header>
-  <div class="st-body"><nav class="st-outline" aria-label="Week outline" data-outline></nav><main class="st-main" data-main></main><aside class="st-inspector" aria-label="Item settings" data-inspector></aside></div>
+  <div class="st-top-actions"><button type="button" class="st-drawer-btn" data-studio="drawer-inspector" aria-expanded="false" aria-controls="st-inspector">⚙<span> Settings</span></button>${button('save','Save draft')}${button('preview','Preview','aria-label="Student preview"')}${button('publish','Publish','class="primary"')}${button('close','✕','aria-label="Close Lesson Studio"')}</div></header>
+  <div class="st-body"><nav class="st-outline" id="st-outline" tabindex="-1" aria-label="Week outline" data-outline></nav><main class="st-main" data-main></main><aside class="st-inspector" id="st-inspector" tabindex="-1" aria-label="Item settings" data-inspector></aside><button type="button" class="st-scrim" data-studio="drawer-close" aria-label="Close panel" tabindex="-1"></button></div>
   <section class="st-overlay" data-studio-panel hidden aria-label="Lesson dialog"></section></div>`;
  }
  function renderOutline(){
@@ -230,6 +238,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  }
  async function renderInspector({focus=false,force=false}={}){
   const el=q('[data-inspector]');if(!el||!s.week)return;
+  if(focus&&narrow())setDrawer('inspector');
   const block=['lesson','assignment'].includes(s.pane)?selectedBlock():null;
   const key=s.equation?'inline-eq':block?block.id+block.type:'lesson:'+s.lessonId+':'+s.pane;
   if(!force&&key===s.inspectorKey)return;s.inspectorKey=key;
@@ -433,6 +442,9 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  async function onClick(event){
   const target=event.target.closest('[data-studio]');if(s.disposed||!target)return;
   event.preventDefault();const action=target.dataset.studio;
+  if(action==='drawer-outline'||action==='drawer-inspector'){const name=action.slice(7);setDrawer(s.drawer===name?'':name,{focus:true});return;}
+  if(action==='drawer-close'){setDrawer('');focusEditor();return;}
+  if(narrow()&&target.closest('[data-outline]'))setDrawer('');
   try{
    if(action==='save'){await save();await saveAssignment();}
    else if(action==='publish')openPublish();
@@ -546,11 +558,12 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  }
  function onKeydown(event){
   const field=event.target;
+  if(event.key==='Escape'&&s.drawer&&panel().hidden){event.preventDefault();setDrawer('');focusEditor();return;}
   if(event.key==='Escape'&&!panel().hidden){event.preventDefault();event.stopPropagation();hidePanel();return;}
   if(!field.closest?.('[data-inspector]')||s.equation)return;
   const single=field.matches('input[type="text"],input[type="url"]')&&!field.closest('[data-eq-host]');
-  if(event.key==='Enter'&&!event.shiftKey&&(single||event.ctrlKey||event.metaKey)){event.preventDefault();continueWriting();}
-  if(event.key==='Escape'&&s.editor){event.preventDefault();focusEditor();}
+  if(event.key==='Enter'&&!event.shiftKey&&(single||event.ctrlKey||event.metaKey)){event.preventDefault();if(narrow())setDrawer('');continueWriting();}
+  if(event.key==='Escape'&&s.editor){event.preventDefault();if(narrow())setDrawer('');focusEditor();}
  }
  // Toolbar buttons never take focus: the caret and selection stay where the teacher left them.
  function onMouseDown(event){if(event.target.closest('.st-toolbar button, .st-insert-list button, .studio-slash'))event.preventDefault();}

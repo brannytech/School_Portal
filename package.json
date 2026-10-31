@@ -16,6 +16,7 @@
     "capture-guide-screenshots": "node scripts/capture-guide-screenshots.mjs",
     "verify-assignments": "node scripts/verify-assignments.mjs",
     "verify-questions": "node scripts/verify-questions.mjs",
+    "verify-studio-small": "node scripts/verify-studio-small.mjs",
     "verify-studio-a11y": "node scripts/verify-studio-a11y.mjs",
     "verify-math": "node scripts/verify-math/index.mjs && node scripts/verify-math/curriculum.mjs",
     "build": "tsc && node scripts/build-editor.mjs && node scripts/check-build.mjs",

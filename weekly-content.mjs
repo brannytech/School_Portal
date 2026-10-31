@@ -281,7 +281,7 @@ export async function weeklyContentApi(x){
   const sub=prev||{id:randomUUID(),student:u.id,name:u.name,...ctx,kind:'assignment'};
   Object.assign(sub,{assignment:a.id,online:true,answers,files:[],week:a.week,topic:a.title,max:a.max,late,created:new Date().toISOString(),
    results:result.results.map(r=>({question:r.question,correct:r.correct})),autoScore:score,
-   status:immediate?'Marked':prev?'Resubmitted':late?'Late':'Submitted',score:immediate?score:null,feedback:immediate?'Marked automatically.':'',autoMarked:immediate,...(immediate?{markedAt:new Date().toISOString()}:{})});
+   status:immediate?'Marked':prev?'Resubmitted':late?'Late':'Submitted',score:immediate?score:null,feedback:immediate?(late?'Marked automatically. Submitted after the deadline, so it counts as late.':'Marked automatically.'):'',autoMarked:immediate,...(immediate?{markedAt:new Date().toISOString()}:{})});
   if(!prev)db.submissions.push(sub);await save();
   json({submitted:true,graded:immediate,late,...(immediate?{score,max:a.max,percentage:result.percentage,correct:result.correct,total:result.total,results:result.results.map((r,i)=>({question:r.question,correct:r.correct,...(a.showAnswers&&!a.resubmission?{answer:r.answer,explanation:r.explanation}:{})}))}:{})},201);return true;
  }

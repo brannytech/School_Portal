@@ -73,6 +73,13 @@ test('review fixes: quiz start hides answer keys, student state hides per-questi
   const sub=await req('assignment-submit',{assignment:id,answers:{mq1:['2','4'],mq2:'2'}},student);assert.equal(sub.status,201,JSON.stringify(sub.value));
   const mineSub=(await req('state',null,student)).value.submissions.find(v=>v.assignment===id);
   assert(mineSub,'submission visible to its student');assert.equal(mineSub.results,undefined,'per-question results hidden until review');assert.equal(mineSub.autoScore,undefined);
+  // Late work with immediate grading is still marked, and is flagged as late.
+  const l=await req('assignment-save',{assignment:{week:31,title:'Late one',scope:'GENERAL',lessons:[],mode:'ONLINE',autoGrade:'IMMEDIATE',max:10,instructions:'x',questions:[mq2]}},teacher);
+  const lid=l.value.assignment.id;const rel=await req('assignment-release',{id:lid,status:'PUBLISHED',due:'2020-01-01'},teacher);assert.equal(rel.status,200,JSON.stringify(rel.value));
+  const late=await req('assignment-submit',{assignment:lid,answers:{mq2:'2'}},student);assert.equal(late.status,201,JSON.stringify(late.value));
+  assert.equal(late.value.late,true);assert.equal(late.value.graded,true);assert.equal(late.value.score,10);
+  const lateSub=(await req('state',null,student)).value.submissions.find(v=>v.assignment===lid);
+  assert.equal(lateSub.late,true);assert.equal(lateSub.status,'Marked');assert.match(lateSub.feedback,/late/i);
   // 0.25 + 0.25 marks, both right: full credit, not half.
   const mark=(await req('state',null,teacher)).value.submissions.find(v=>v.assignment===id);assert.equal(mark.autoScore,10,'small marks score out of the real total');
  }finally{server.kill();}

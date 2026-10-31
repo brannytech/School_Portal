@@ -5,3 +5,4 @@
 
 /* Reveal controls are touch targets: at least 40px tall. */
 .lesson-document details>summary{display:flex;align-items:center;min-height:40px;cursor:pointer}
+.question-picture{margin:8px 0;max-width:100%}.question-picture img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line,#ddd)}

@@ -32,6 +32,7 @@ const ITEMS=[
 const NO_SETTINGS=new Set(['widget','divider']);
 
 export async function openContentStudio({host,context,api,allocations=[],week=1,onPublished,renderWidget,uploadImage}){
+ if(!document.querySelector('link[data-math-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/vendor/katex.min.css';link.dataset.mathStyle='true';document.head.append(link);}
  if(host.open)throw Error('Close the current editor before opening Content Studio.');
  if(!document.querySelector('link[data-studio-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/content-studio.css';link.dataset.studioStyle='true';document.head.append(link);}
  const editorModule=await import('/vendor/lesson-editor.js');
@@ -43,6 +44,14 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
 
  const call=(route,data)=>data?api(route,{...context,...data}):api(route+(route.includes('?')?'&':'?')+new URLSearchParams(context));
  const q=selector=>host.querySelector(selector);
+ // On a small window the outline and settings become drawers, so the page keeps the whole screen.
+ const narrow=()=>window.matchMedia('(max-width:1100px)').matches;
+ function setDrawer(name,{focus=false}={}){
+  s.drawer=name||'';const shell=q('.st-shell');if(!shell)return;
+  if(name)shell.dataset.drawer=name;else delete shell.dataset.drawer;
+  for(const b of host.querySelectorAll('[data-studio^="drawer-"][aria-expanded]'))b.setAttribute('aria-expanded',String(b.dataset.studio==='drawer-'+name));
+  if(name&&focus)q(name==='outline'?'[data-outline]':'[data-inspector]')?.focus({preventScroll:true});
+ }
  const current=()=>s.week?.lessons.find(l=>l.id===s.lessonId)||null;
  const currentAssignment=()=>s.assignments.find(a=>a.id===s.assignmentId)||null;
  // The page editor writes into whichever item is open: a subtopic or an assignment.
@@ -181,10 +190,10 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   if(!host.open)host.showModal();
  }
  function shellHTML(){
-  return `<div class="st-shell"><header class="st-top"><div class="st-brand"><span class="st-mark" aria-hidden="true">L</span><div><h2>Lesson Studio</h2><span class="studio-context" data-context></span></div></div>
+  return `<div class="st-shell"><header class="st-top"><button type="button" class="st-drawer-btn" data-studio="drawer-outline" aria-expanded="false" aria-controls="st-outline" aria-label="Show outline">☰<span> Outline</span></button><div class="st-brand"><span class="st-mark" aria-hidden="true">L</span><div><h2>Lesson Studio</h2><span class="studio-context" data-context></span></div></div>
   <div class="st-state"><span data-studio-status role="status" aria-live="polite"></span><span class="st-ready" data-readiness role="status"></span></div>
-  <div class="st-top-actions">${button('save','Save draft')}${button('preview','Preview','aria-label="Student preview"')}${button('publish','Publish','class="primary"')}${button('close','✕','aria-label="Close Lesson Studio"')}</div></header>
-  <div class="st-body"><nav class="st-outline" aria-label="Week outline" data-outline></nav><main class="st-main" data-main></main><aside class="st-inspector" aria-label="Item settings" data-inspector></aside></div>
+  <div class="st-top-actions"><button type="button" class="st-drawer-btn" data-studio="drawer-inspector" aria-expanded="false" aria-controls="st-inspector">⚙<span> Settings</span></button>${button('save','Save draft')}${button('preview','Preview','aria-label="Student preview"')}${button('publish','Publish','class="primary"')}${button('close','✕','aria-label="Close Lesson Studio"')}</div></header>
+  <div class="st-body"><nav class="st-outline" id="st-outline" tabindex="-1" aria-label="Week outline" data-outline></nav><main class="st-main" data-main></main><aside class="st-inspector" id="st-inspector" tabindex="-1" aria-label="Item settings" data-inspector></aside><button type="button" class="st-scrim" data-studio="drawer-close" aria-label="Close panel" tabindex="-1"></button></div>
   <section class="st-overlay" data-studio-panel hidden aria-label="Lesson dialog"></section></div>`;
  }
  function renderOutline(){
@@ -229,6 +238,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  }
  async function renderInspector({focus=false,force=false}={}){
   const el=q('[data-inspector]');if(!el||!s.week)return;
+  if(focus&&narrow())setDrawer('inspector');
   const block=['lesson','assignment'].includes(s.pane)?selectedBlock():null;
   const key=s.equation?'inline-eq':block?block.id+block.type:'lesson:'+s.lessonId+':'+s.pane;
   if(!force&&key===s.inspectorKey)return;s.inspectorKey=key;
@@ -314,6 +324,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   const parts=path.split('.'),prefix=parts[0],key=parts[1],item=questionList(prefix)[s[indexField(prefix)]];if(!item)return;
   if(key==='options'||key==='accepted')item[key]=value.split('\n');
   else if(key==='answers'){item.answers=[...host.querySelectorAll(`[data-path="${prefix}.answers"]:checked`)].map(e=>e.value);item.answer=item.answers.join('|');}
+  else if(key==='imageAlt'){if(item.image)item.image.alt=value;}
   else if(key==='marks'||key==='tolerance'){if(value===''||!Number.isFinite(Number(value)))delete item[key];else item[key]=Number(value);}
   else item[key]=value;
   touch(prefix);
@@ -431,6 +442,9 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  async function onClick(event){
   const target=event.target.closest('[data-studio]');if(s.disposed||!target)return;
   event.preventDefault();const action=target.dataset.studio;
+  if(action==='drawer-outline'||action==='drawer-inspector'){const name=action.slice(7);setDrawer(s.drawer===name?'':name,{focus:true});return;}
+  if(action==='drawer-close'){setDrawer('');focusEditor();return;}
+  if(narrow()&&target.closest('[data-outline]'))setDrawer('');
   try{
    if(action==='save'){await save();await saveAssignment();}
    else if(action==='publish')openPublish();
@@ -482,6 +496,12 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
    }
    else if(action==='apply-link'){const href=safeLink(q('[data-link-url]').value);if(!href)throw Error('Use a full HTTPS or mailto address.');hidePanel();s.editor.chain().focus().setLink({href}).run();focusEditor();}
    else if(action==='remove-link'){hidePanel();s.editor?.chain().focus().unsetLink().run();focusEditor();}
+   else if(action.startsWith('qimage-pick-')||action.startsWith('qimage-remove-')){
+    const prefix=action.split('-')[2],item=questionList(prefix)[s[indexField(prefix)]];if(!item)return;
+    if(action.startsWith('qimage-remove-'))delete item.image;
+    else{if(!uploadImage)throw Error('Image upload is not available here.');const file=await pickImageFile();if(!file)return;status('Uploading picture…');const fileId=await uploadLessonImage(file,uploadImage);item.image={fileId,alt:item.image?.alt||''};status('Picture added. Describe it for learners who cannot see it.');}
+    touch(prefix);refreshQuestions();
+   }
    else if(action==='add-practice'){const lesson=current();lesson.questions.push(newQuestion(uid()));s.questionIndex=practiceOf(lesson).length-1;changed();refreshQuestions();}
    else if(action==='add-quiz'){s.week.quiz.push(newQuestion(uid(),'quiz'));s.quizIndex=s.week.quiz.length-1;changed();refreshQuestions();}
    else if(action==='remove-practice'){const lesson=current(),item=practiceOf(lesson)[s.questionIndex];lesson.questions=lesson.questions.filter(v=>v!==item);s.questionIndex=Math.max(0,s.questionIndex-1);changed();refreshQuestions();}
@@ -538,11 +558,12 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  }
  function onKeydown(event){
   const field=event.target;
+  if(event.key==='Escape'&&s.drawer&&panel().hidden){event.preventDefault();setDrawer('');focusEditor();return;}
   if(event.key==='Escape'&&!panel().hidden){event.preventDefault();event.stopPropagation();hidePanel();return;}
   if(!field.closest?.('[data-inspector]')||s.equation)return;
   const single=field.matches('input[type="text"],input[type="url"]')&&!field.closest('[data-eq-host]');
-  if(event.key==='Enter'&&!event.shiftKey&&(single||event.ctrlKey||event.metaKey)){event.preventDefault();continueWriting();}
-  if(event.key==='Escape'&&s.editor){event.preventDefault();focusEditor();}
+  if(event.key==='Enter'&&!event.shiftKey&&(single||event.ctrlKey||event.metaKey)){event.preventDefault();if(narrow())setDrawer('');continueWriting();}
+  if(event.key==='Escape'&&s.editor){event.preventDefault();if(narrow())setDrawer('');focusEditor();}
  }
  // Toolbar buttons never take focus: the caret and selection stay where the teacher left them.
  function onMouseDown(event){if(event.target.closest('.st-toolbar button, .st-insert-list button, .studio-slash'))event.preventDefault();}

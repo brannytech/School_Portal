@@ -120,7 +120,12 @@ export function createLessonEditor({element,content,renderBlock,onPaint,onChange
    const host=element.closest('dialog')||document.body;
    if(!popup){popup=document.createElement('div');popup.className='studio-slash';popup.setAttribute('role','listbox');popup.setAttribute('aria-label','Add to lesson');host.append(popup);}
    popup.innerHTML=items.map((item,i)=>`<div role="option" id="slash-${item.id}" data-slash="${item.id}" aria-selected="${i===index}" class="${i===index?'is-active':''}"><strong>${item.label}</strong><span>${item.hint||''}</span></div>`).join('');
-   const coords=view.coordsAtPos(range.to);popup.style.left=Math.min(coords.left,window.innerWidth-280)+'px';popup.style.top=coords.bottom+6+'px';
+   const coords=view.coordsAtPos(range.to),vh=window.innerHeight,below=vh-coords.bottom-14,above=coords.top-14,natural=Math.min(popup.scrollHeight,300);
+   popup.style.left=Math.max(8,Math.min(coords.left,window.innerWidth-280))+'px';
+   // Open downwards when it fits (or there is more room below); otherwise flip above the caret. Never taller than the room it has.
+   if(below>=natural||below>=above){popup.style.top=coords.bottom+6+'px';popup.style.bottom='auto';popup.style.maxHeight=Math.max(110,Math.min(300,below))+'px';}
+   else{popup.style.top='auto';popup.style.bottom=(vh-coords.top+6)+'px';popup.style.maxHeight=Math.max(110,Math.min(300,above))+'px';}
+   popup.querySelector('.is-active')?.scrollIntoView({block:'nearest'});
    popup.onmousedown=event=>{event.preventDefault();const row=event.target.closest('[data-slash]');if(row)pick(view,items.find(item=>item.id===row.dataset.slash));};
   };
   const pick=(view,item)=>{if(!item||!range)return;const {from,to}=range;close();view.dispatch(view.state.tr.delete(from,to));onSlash?.(item.id);};

@@ -94,7 +94,9 @@ export function prepareAssignment(b,ctx,teacher,fail,previous){
  let questions=previous?.questions||[];
  if(b.questions!==undefined){
   if(!Array.isArray(b.questions)||b.questions.length>100)fail(400,'Add up to 100 questions to an assignment.');
-  questions=b.questions.map((q,i)=>({...question(q,'assignment-'+(i+1),fail),stage:'assignment'}));
+  // Drafts keep half-written questions; the full check runs when the assignment is released.
+  const KEEP=['id','prompt','kind','answer','answers','accepted','options','explanation','hint','tolerance','marks','difficulty','variables'];
+  questions=b.questions.map((q,i)=>open?{...question(q,'assignment-'+(i+1),fail),stage:'assignment'}:{...Object.fromEntries(KEEP.filter(k=>q?.[k]!==undefined).map(k=>[k,typeof q[k]==='string'?clean(q[k],2000):structuredClone(q[k])])),id:clean(q?.id,100)||randomUUID(),stage:'assignment'});
   if(new Set(questions.map(q=>q.id)).size!==questions.length)fail(400,'Question IDs must be unique.');
  }
  if(mode==='ONLINE'&&open&&!questions.length)fail(400,'An online assignment needs at least one question.');
@@ -202,7 +204,8 @@ export async function weeklyContentApi(x){
 
  // ---------- assignments written in Lesson Studio ----------
  const mine=id=>{staff();const a=db.assignments.find(v=>v.id===id);if(!a)fail(404,'Assignment not found.');scope(u,a.class,a.subject);return a;};
- const weekOf=(week,cc=c,ss=s,tt=t)=>course(cc,ss,tt).find(w=>w.id===Number(week));
+ // A week that is still a private draft can already have assignments written for it.
+ const weekOf=(week,cc=c,ss=s,tt=t)=>course(cc,ss,tt).find(w=>w.id===Number(week))||db.weekDrafts?.[scopeKey(cc,ss,tt)+'|'+Number(week)]?.week;
  const checkLinks=(a,week)=>{
   if(!week)fail(400,'Choose a valid week for this assignment.');
   for(const id of a.lessons||[])if(!week.lessons.some(l=>l.id===id))fail(400,'An assignment can only follow subtopics from its own week.');

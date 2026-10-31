@@ -28,10 +28,10 @@ export function kindSettings(q,prefix){
  return html;
 }
 
-export function questionPanelHTML({questions,index,quiz}){
- const prefix=quiz?'quiz':'practice',i=Math.max(0,Math.min(index,questions.length-1)),q=questions[i];
- return `<section class="st-bank" data-bank-panel="${prefix}"><div class="st-pane-head"><h2>${quiz?'Weekly quiz':'Practice questions'}</h2><span class="small muted">${questions.length} question${questions.length===1?'':'s'}</span></div>
- <p class="small muted">${quiz?'This quiz covers the whole week.':'These questions belong to the selected subtopic.'} Answers stay hidden from students until they submit. Questions are optional: you can publish a lesson without them.</p>
+export function questionPanelHTML({questions,index,quiz,bank}){
+ const prefix=bank||(quiz?'quiz':'practice'),i=Math.max(0,Math.min(index,questions.length-1)),q=questions[i];
+ return `<section class="st-bank" data-bank-panel="${prefix}"><div class="st-pane-head"><h2>${prefix==='assign'?'Assignment questions':quiz?'Weekly quiz':'Practice questions'}</h2><span class="small muted">${questions.length} question${questions.length===1?'':'s'}</span></div>
+ <p class="small muted">${prefix==='assign'?'Students answer these on the platform. Answers stay hidden until they submit.':quiz?'This quiz covers the whole week.':'These questions belong to the selected subtopic.'} ${prefix==='assign'?'Add at least one question before releasing an online assignment.':'Questions are optional: you can publish a lesson without them.'}</p>
  ${q?`<label>Choose a question to edit<select data-bank="${prefix}">${questions.map((v,n)=>`<option value="${n}" ${i===n?'selected':''}>${n+1}. ${esc((v.prompt||'').slice(0,60)||'New question')}</option>`).join('')}</select></label>
  ${area('Question (use $…$ for a formula, e.g. $x^2-4=0$)',prefix+'.prompt',q.prompt)}
  <label>How should the student answer?<select data-question-kind="${prefix}">${Object.entries(KIND_NAMES).map(([kind,label])=>`<option value="${kind}" ${q.kind===kind?'selected':''}>${label}</option>`).join('')}${!KIND_NAMES[q.kind]?`<option selected value="${esc(q.kind)}">Existing ${esc(q.kind)} question (retained)</option>`:''}</select></label>

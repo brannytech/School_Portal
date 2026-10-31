@@ -80,7 +80,10 @@ Original brief, for reference:
 - Grading: extend `checkAnswer` in `core/domain.ts` (strict TypeScript, then `npm run build`) and keep old questions working. Students never receive answers (see `studentLesson` allow-list in `public/lesson-document.js`; add new safe fields there).
 - Tests: grading unit tests (tolerance, multi-answer partial/none), server validation, student payload leak test, browser test that an equation + image in a prompt renders for the student.
 
-### Step C. Stage 6: assignments written in the Studio
+### Step C. Stage 6: assignments written in the Studio — DONE (31 Oct 2026)
+Implemented as agreed with the owner: scope LESSON / GENERAL / WEEK_END with linked subtopics; new work is LOCKED until the teacher releases it (Studio panel, or "Release to students" on the Assignments page, for use in class); PHOTO mode (notebook + photo, teacher marks) and ONLINE mode (questions marked at once or held for review; score stored on the submission so monitoring counts it); copy to another week/class; assignments are saved separately from the week (`assignment-save/-release/-copy/-delete/-submit`). Tests: `tests/assignments-v2.test.mjs`, `scripts/verify-assignments.mjs`.
+Still to do in Step D: delete the old assignment form/handlers in `public/weekly-course.js` (`course-new-assignment`, `course-edit-assignment`) and the legacy `assignment` POST in `server.mjs`; image-in-assignment media rules are in place but only the copy path is covered by a unit test.
+Original brief:
 - New Studio pane "Assignments" in the outline (per week). Each assignment: title, instructions written in the same continuous editor (stored as `document`), settings panel with due date, maximum marks, release (draft / now / scheduled / locked, reuse the same dialog wording), resubmission allowed, attachments allowed.
 - Server: `assignment-save` and `prepareAssignment` accept `document` (validated with `validateLessonDocument`), keep `instructions` plain-text fallback; students see rendered document; submissions flow unchanged (photo upload).
 - Remove the duplicate assignment form from `public/weekly-course.js`.

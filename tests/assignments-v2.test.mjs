@@ -34,7 +34,10 @@ test('assignments: linked, general and end-of-week work; locked until released; 
   assert.equal((await save({week:16,title:'x',scope:'LESSON',lessons:[],instructions:'x'})).status,400,'a lesson assignment needs one subtopic');
   assert.equal((await save({week:16,title:'x',scope:'LESSON',lessons:['17-a'],instructions:'x'})).status,400,'subtopic must belong to the week');
   assert.equal((await save({week:16,title:'',instructions:'x'})).status,400);
-  assert.equal((await save({week:16,title:'bad q',mode:'ONLINE',instructions:'x',questions:[{...q1,answer:''}]})).status,400);
+  const halfDone=await save({week:16,title:'bad q',mode:'ONLINE',instructions:'x',questions:[{...q1,answer:''}]});
+  assert.equal(halfDone.status,200,'half-written questions are kept while the assignment is a draft');
+  assert.equal((await req('assignment-release',{id:halfDone.value.assignment.id,status:'PUBLISHED',due:'2099-01-01'},teacher)).status,400,'but cannot be released until complete');
+  assert.equal((await req('assignment-delete',{id:halfDone.value.assignment.id},teacher)).status,200);
 
   // Students see only a locked placeholder until release; nothing can be submitted.
   const locked=await listed(id.end);assert(locked,'students see that the work exists');assert.equal(locked.available,false);assert.equal(locked.questions,undefined);assert.equal(locked.document,undefined);

@@ -8,6 +8,7 @@ import {blockInspectorHTML,lessonSettingsHTML,applyBlockEdit} from './inspector.
 import {mountEquationPanel} from './equation.js';
 import {lessonName,releaseLabel,publishedMessage,reviewHTML,publishDialog,defaultSelection} from './publish.js';
 import {questionPanelHTML,newQuestion,practiceOf,answerInput,questionsFromCSV} from './questions.js';
+import {newAssignment,assignmentOutlineHTML,assignmentTabsHTML,assignmentSettingsHTML,releasePanelHTML,copyPanelHTML} from './assignments.js';
 import {pickImageFile,uploadLessonImage} from './media.js';
 
 // What can be added to a lesson. `input` items open their settings straight away.
@@ -30,20 +31,23 @@ const ITEMS=[
 ];
 const NO_SETTINGS=new Set(['widget','divider']);
 
-export async function openContentStudio({host,context,api,week=1,onPublished,renderWidget,uploadImage}){
+export async function openContentStudio({host,context,api,allocations=[],week=1,onPublished,renderWidget,uploadImage}){
  if(host.open)throw Error('Close the current editor before opening Content Studio.');
  if(!document.querySelector('link[data-studio-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/content-studio.css';link.dataset.studioStyle='true';document.head.append(link);}
  const editorModule=await import('/vendor/lesson-editor.js');
  const s={
   week:null,lessonId:null,pane:'lesson',blockId:null,editor:null,releases:{},templates:[],assignments:[],
   revision:null,draftRevision:null,dirty:false,generation:0,saving:null,conflict:false,disposed:false,
-  questionIndex:0,quizIndex:0,loadWeek:week,status:'Loading lesson…',publish:null,issues:[],equation:null,inspectorKey:null,pendingDelete:null
+  questionIndex:0,quizIndex:0,assignIndex:0,assignmentId:null,assignTab:'write',assignDirty:false,loadWeek:week,status:'Loading lesson…',publish:null,issues:[],equation:null,inspectorKey:null,pendingDelete:null
  };
 
  const call=(route,data)=>data?api(route,{...context,...data}):api(route+(route.includes('?')?'&':'?')+new URLSearchParams(context));
  const q=selector=>host.querySelector(selector);
  const current=()=>s.week?.lessons.find(l=>l.id===s.lessonId)||null;
- const lessonBlocks=lesson=>lesson?(lesson.document?.blocks??documentForLesson(lesson).blocks):[];
+ const currentAssignment=()=>s.assignments.find(a=>a.id===s.assignmentId)||null;
+ // The page editor writes into whichever item is open: a subtopic or an assignment.
+ const holder=()=>s.pane==='assignment'?currentAssignment():current();
+ const lessonBlocks=item=>item?(item.document?.blocks??(item.scope!==undefined?[]:documentForLesson(item).blocks)):[];
  const selectedBlock=()=>s.editor&&s.blockId?editorModule.getBlock(s.editor,s.blockId):null;
  const panel=()=>q('[data-studio-panel]');
  function status(message){s.status=message;const el=q('[data-studio-status]');if(el)el.textContent=message;}
@@ -61,7 +65,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   status(publish?'Validating and publishing…':'Saving private draft…');
   const run=async()=>{
    try{
-    const result=await call('weekly-template',{week:payload,assignments:s.assignments,revision:s.revision,draftRevision:s.draftRevision,publish,release});
+    const result=await call('weekly-template',{week:payload,assignments:[],revision:s.revision,draftRevision:s.draftRevision,publish,release});
     s.revision=result.revision;s.draftRevision=result.draftRevision;
     if(generation===s.generation){s.dirty=false;status(publish?publishedMessage(result):'All changes saved at '+new Date().toLocaleTimeString('en-NG',{timeZone:'Africa/Lagos',hour:'2-digit',minute:'2-digit'}));}
     else{status(publish?'Published the saved revision. Newer changes are still a private draft.':'Newer changes are waiting to save…');s.autosave=setTimeout(()=>save(false),500);}
@@ -79,12 +83,12 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   if(!Number.isInteger(Number(id))||Number(id)<1||Number(id)>52)throw Error('Choose a learning week from 1 to 52.');
   if(!discard&&s.dirty&&!await save())return;
   const request=s.loadRequest=(s.loadRequest||0)+1;status('Loading week '+Number(id)+'…');host.setAttribute('aria-busy','true');
-  const data=await call('weekly-template?week='+Number(id)),templates=await call('studio-templates');
+  const data=await call('weekly-template?week='+Number(id)),templates=await call('studio-templates'),assignmentData=await call('assignments?week='+Number(id)).catch(()=>({assignments:[]}));
   if(s.disposed||request!==s.loadRequest)return;
   destroyEditor();
   s.week=structuredClone(data.draft?.week||data.published||{id:Number(id),title:'',subtitle:'',lessons:[],quiz:[],reflectionPrompt:'What did you learn and what needs more practice?'});
   s.revision=data.draft&&Object.hasOwn(data.draft,'baseRevision')?data.draft.baseRevision:data.revision;s.draftRevision=data.draftRevision;
-  s.releases=data.releases||{};s.assignments=structuredClone(data.draft?.assignments||data.assignments||[]);
+  s.releases=data.releases||{};s.assignments=structuredClone(assignmentData.assignments||[]);s.assignmentId=null;s.assignTab='write';s.assignDirty=false;s.assignIndex=0;
   s.lessonId=s.week.lessons[0]?.id||null;s.pane='lesson';s.blockId=null;s.equation=null;s.dirty=false;s.conflict=false;s.questionIndex=0;s.quizIndex=0;s.loadWeek=Number(id);
   s.week.quiz??=[];for(const lesson of s.week.lessons)lesson.questions??=[];
   s.templates=templates;s.status=data.draft?'Private draft loaded':data.published?'Published content loaded':'New week. Add your first subtopic.';
@@ -103,14 +107,14 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   }catch{return placeholder(BLOCK_LABELS[block.type]||block.type,'This item needs attention.');}
  }
  function onEditorChange(json){
-  const lesson=current();if(!lesson)return;
-  lesson.document={schemaVersion:1,blocks:docToBlocks(json)};changed();
+  const item=holder();if(!item)return;
+  item.document={schemaVersion:1,blocks:docToBlocks(json)};if(s.pane==='assignment')assignmentChanged();else changed();
  }
  function onEditorSelect(id){
   if(s.placing||id===s.blockId)return;s.blockId=id;s.equation=null;renderInspector();
  }
  function mountEditor(){
-  const element=q('[data-editor]'),lesson=current();destroyEditor();if(!element||!lesson)return;
+  const element=q('[data-editor]'),lesson=holder();destroyEditor();if(!element||!lesson)return;
   s.editor=editorModule.createLessonEditor({
    element,content:blocksToDoc(lessonBlocks(lesson)),renderBlock:previewHTML,onPaint:dom=>hydrateLessonMath(dom),
    onChange:onEditorChange,onSelect:onEditorSelect,onEquation:openInlineEquation,onFiles:files=>addImages(files),
@@ -120,7 +124,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  function focusEditor(position=null){editorModule.focusNow(s.editor,position);}
 
  async function insertItem(id){
-  if(!s.editor||!current())return;
+  if(!s.editor||!holder())return;
   if(id==='divider'){s.editor.chain().focus().setHorizontalRule().run();return;}
   if(id==='image'){await addImages();return;}
   const extra=id==='graph'?{graph:defaultGraph()}:id==='math-tool'?{config:defaultTool()}:{};
@@ -133,7 +137,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   s.blockId=needsInput?block.id:null;s.equation=null;renderInspector({focus:needsInput,force:true});
  }
  async function addImages(files=null){
-  if(!s.editor||!current())return;
+  if(!s.editor||!holder())return;
   try{
    if(!uploadImage)throw Error('Image upload is not available here.');
    const list=files||[await pickImageFile()].filter(Boolean);
@@ -188,13 +192,21 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   const lessons=s.week.lessons;
   el.innerHTML=`<div class="st-week"><label for="st-week-number">Week</label><div class="st-week-row">${button('week-prev','‹','aria-label="Previous week"')}<input id="st-week-number" data-load-week type="number" min="1" max="52" value="${s.loadWeek}">${button('week-next','›','aria-label="Next week"')}${button('load','Open')}</div></div>
   ${input('Weekly topic','week.title',s.week.title,'text','placeholder="e.g. Quadratic equations"')}
-  <h3>Subtopics</h3><ol class="st-lessons">${lessons.map((l,i)=>`<li><button type="button" data-studio="select-lesson" data-id="${esc(l.id)}" ${l.id===s.lessonId&&s.pane!=='quiz'?'aria-current="true"':''}><span data-outline-title="${esc(l.id)}">${esc(lessonName(l,i))}</span><span class="st-chip st-chip-${esc((s.releases[l.id]?.available?'live':s.releases[l.id]?.status||'none').toLowerCase())}">${esc(releaseLabel(s.releases[l.id]))}</span></button></li>`).join('')}</ol>
+  <h3>Subtopics</h3><ol class="st-lessons">${lessons.map((l,i)=>`<li><button type="button" data-studio="select-lesson" data-id="${esc(l.id)}" ${l.id===s.lessonId&&!['quiz','assignment'].includes(s.pane)?'aria-current="true"':''}><span data-outline-title="${esc(l.id)}">${esc(lessonName(l,i))}</span><span class="st-chip st-chip-${esc((s.releases[l.id]?.available?'live':s.releases[l.id]?.status||'none').toLowerCase())}">${esc(releaseLabel(s.releases[l.id]))}</span></button></li>`).join('')}</ol>
   ${button('new-lesson','+ Add subtopic','class="st-add"')}
-  <h3>This week</h3><div class="st-nav">${button('pane-quiz',`Weekly quiz (${(s.week.quiz||[]).length})`,s.pane==='quiz'?'aria-current="true"':'')}${button('history','Version history')}</div>`;
+  <h3>This week</h3><div class="st-nav">${button('pane-quiz',`Weekly quiz (${(s.week.quiz||[]).length})`,s.pane==='quiz'?'aria-current="true"':'')}${button('history','Version history')}</div>
+  ${assignmentOutlineHTML(s.assignments,s.assignmentId,s.pane)}`;
  }
  function renderMain(){
   const el=q('[data-main]');if(!el||!s.week)return;destroyEditor();
   const lesson=current();
+  if(s.pane==='assignment'){
+   const a=currentAssignment();if(!a){el.innerHTML='<div class="st-empty"><h3>Choose an assignment</h3></div>';return;}
+   if(a.mode!=='ONLINE'&&s.assignTab==='questions')s.assignTab='write';
+   if(s.assignTab==='questions'){el.innerHTML=assignmentTabsHTML(a,s.assignTab)+questionPanelHTML({questions:a.questions||[],index:s.assignIndex,bank:'assign'});return;}
+   el.innerHTML=assignmentTabsHTML(a,s.assignTab)+toolbarHTML()+`<article class="st-page"><textarea data-path="assign.title" rows="1" aria-label="Assignment title" placeholder="Assignment title">${esc(a.title)}</textarea><div class="st-editor" data-editor></div></article>`;
+   mountEditor();return;
+  }
   if(s.pane==='quiz'){el.innerHTML=questionPanelHTML({questions:s.week.quiz||[],index:s.quizIndex,quiz:true});return;}
   if(!lesson){el.innerHTML=`<div class="st-empty"><h3>${s.week.lessons.length?'Choose a subtopic':'This week is empty'}</h3><p>Write your lesson as one continuous page: text, equations, images and graphs together.</p>${button('new-lesson','Create the first subtopic','class="primary"')}</div>`;return;}
   if(s.pane==='practice'){el.innerHTML=mainTabs(lesson)+questionPanelHTML({questions:practiceOf(lesson),index:s.questionIndex,quiz:false});return;}
@@ -217,7 +229,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
  }
  async function renderInspector({focus=false,force=false}={}){
   const el=q('[data-inspector]');if(!el||!s.week)return;
-  const block=s.pane==='lesson'?selectedBlock():null;
+  const block=['lesson','assignment'].includes(s.pane)?selectedBlock():null;
   const key=s.equation?'inline-eq':block?block.id+block.type:'lesson:'+s.lessonId+':'+s.pane;
   if(!force&&key===s.inspectorKey)return;s.inspectorKey=key;
   const token=s.inspectorToken=(s.inspectorToken||0)+1,stale=()=>token!==s.inspectorToken;
@@ -246,6 +258,8 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    }else if(focus){(block.type==='image'&&el.querySelector('[data-path="block.alt"]')||el.querySelector('[data-item-editor] [data-path],[data-item-editor] button'))?.focus();}
    void ids;return;
   }
+  if(s.pane==='assignment'&&currentAssignment()&&s.assignTab==='write'){el.innerHTML=assignmentSettingsHTML(currentAssignment(),{lessons:s.week.lessons});return;}
+  if(s.pane==='assignment'&&currentAssignment()){el.innerHTML=assignmentSettingsHTML(currentAssignment(),{lessons:s.week.lessons});return;}
   const lesson=current();
   if(s.pane==='lesson'&&lesson){const index=s.week.lessons.indexOf(lesson);el.innerHTML=lessonSettingsHTML(lesson,{index,count:s.week.lessons.length});}
   else el.innerHTML='<p class="small muted">Choose a subtopic to see its settings.</p>';
@@ -283,7 +297,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
 
  // ---------- structure: subtopics and questions ----------
  const blankLesson=()=>({id:s.week.id+'-'+uid(),title:'',minutes:20,explain:'',objectives:[],summary:[],document:{schemaVersion:1,blocks:[]},questions:[]});
- function selectLesson(id,pane='lesson'){s.lessonId=id;s.pane=pane;s.blockId=null;s.equation=null;s.questionIndex=0;render();}
+ async function selectLesson(id,pane='lesson'){if(s.assignDirty)await saveAssignment();s.assignmentId=null;s.lessonId=id;s.pane=pane;s.blockId=null;s.equation=null;s.questionIndex=0;render();}
  function addLesson(){const lesson=blankLesson();s.week.lessons.push(lesson);changed();selectLesson(lesson.id);focusEditor('start');}
  function moveLesson(direction){const list=s.week.lessons,i=list.findIndex(l=>l.id===s.lessonId),j=i+direction;if(i<0||j<0||j>=list.length)return;[list[i],list[j]]=[list[j],list[i]];changed();render();}
  function duplicateLesson(){const lesson=current();if(!lesson)return;const copy=structuredClone(lesson);copy.id=s.week.id+'-'+uid();copy.title=(lesson.title||'Untitled')+' (copy)';copy.questions=(copy.questions||[]).map(item=>({...item,id:uid()}));s.week.lessons.splice(s.week.lessons.indexOf(lesson)+1,0,copy);changed();selectLesson(copy.id);}
@@ -292,38 +306,116 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   if(s.pendingDelete!==lesson.id){s.pendingDelete=lesson.id;const b=q('[data-studio="lesson-remove"]');if(b)b.textContent='Click again to delete';return;}
   s.pendingDelete=null;const list=s.week.lessons,i=list.indexOf(lesson);list.splice(i,1);changed();selectLesson(list[Math.max(0,i-1)]?.id||null);
  }
- const questionList=prefix=>prefix==='quiz'?s.week.quiz:practiceOf(current());
+ const questionList=prefix=>prefix==='quiz'?s.week.quiz:prefix==='assign'?(currentAssignment()?.questions||[]):practiceOf(current());
+ const indexField=prefix=>({quiz:'quizIndex',assign:'assignIndex'}[prefix]||'questionIndex');
+ const arrayOf=prefix=>prefix==='quiz'?s.week.quiz:currentAssignment().questions;
+ const touch=prefix=>prefix==='assign'?assignmentChanged():changed();
  function writeQuestion(path,value){
-  const parts=path.split('.'),prefix=parts[0],key=parts[1],item=questionList(prefix)[prefix==='quiz'?s.quizIndex:s.questionIndex];if(!item)return;
+  const parts=path.split('.'),prefix=parts[0],key=parts[1],item=questionList(prefix)[s[indexField(prefix)]];if(!item)return;
   if(key==='options'||key==='accepted')item[key]=value.split('\n');
   else if(key==='answers'){item.answers=[...host.querySelectorAll(`[data-path="${prefix}.answers"]:checked`)].map(e=>e.value);item.answer=item.answers.join('|');}
   else if(key==='marks'||key==='tolerance'){if(value===''||!Number.isFinite(Number(value)))delete item[key];else item[key]=Number(value);}
   else item[key]=value;
-  changed();
+  touch(prefix);
   if(key==='options'){const wrap=q(`[data-answer-wrap="${prefix}"]`);if(wrap){if(item.kind==='multi')item.answers=(item.answers||[]).filter(v=>(item.options||[]).includes(v));wrap.innerHTML=answerInput(item,prefix);}}
  }
  function moveQuestion(prefix,by){
-  const list=questionList(prefix),field=prefix==='quiz'?'quizIndex':'questionIndex',from=s[field],to=from+by;if(to<0||to>=list.length)return;
-  if(prefix==='quiz'){[s.week.quiz[from],s.week.quiz[to]]=[s.week.quiz[to],s.week.quiz[from]];}
+  const list=questionList(prefix),field=indexField(prefix),from=s[field],to=from+by;if(to<0||to>=list.length)return;
+  if(prefix!=='practice'){const list2=arrayOf(prefix);[list2[from],list2[to]]=[list2[to],list2[from]];}
   else{const lesson=current(),a=list[from],b=list[to],ia=lesson.questions.indexOf(a),ib=lesson.questions.indexOf(b);lesson.questions[ia]=b;lesson.questions[ib]=a;}
-  s[field]=to;changed();refreshQuestions();
+  s[field]=to;touch(prefix);refreshQuestions();
  }
  function duplicateQuestion(prefix){
-  const list=questionList(prefix),field=prefix==='quiz'?'quizIndex':'questionIndex',item=list[s[field]];if(!item)return;
+  const list=questionList(prefix),field=indexField(prefix),item=list[s[field]];if(!item)return;
   const copy={...structuredClone(item),id:uid()};
-  if(prefix==='quiz')s.week.quiz.splice(s[field]+1,0,copy);else{const lesson=current();lesson.questions.splice(lesson.questions.indexOf(item)+1,0,copy);}
-  s[field]+=1;changed();refreshQuestions();
+  if(prefix!=='practice')arrayOf(prefix).splice(s[field]+1,0,copy);else{const lesson=current();lesson.questions.splice(lesson.questions.indexOf(item)+1,0,copy);}
+  s[field]+=1;touch(prefix);refreshQuestions();
  }
  function importQuestions(prefix){
   const box=q(`[data-csv="${prefix}"]`),report=q(`[data-csv-report="${prefix}"]`);if(!box||!report)return;
-  const {questions,errors}=questionsFromCSV(box.value,{stage:prefix==='quiz'?'quiz':'practice',makeId:uid});
-  if(questions.length){if(prefix==='quiz')s.week.quiz.push(...questions);else current().questions.push(...questions);s[prefix==='quiz'?'quizIndex':'questionIndex']=questionList(prefix).length-1;changed();refreshQuestions();}
+  const {questions,errors}=questionsFromCSV(box.value,{stage:prefix==='quiz'?'quiz':prefix==='assign'?'assignment':'practice',makeId:uid});
+  if(questions.length){if(prefix!=='practice')arrayOf(prefix).push(...questions);else current().questions.push(...questions);s[indexField(prefix)]=questionList(prefix).length-1;touch(prefix);refreshQuestions();}
   const after=q(`[data-csv-report="${prefix}"]`);
   if(after){after.textContent=`${questions.length} question${questions.length===1?'':'s'} imported.${errors.length?' Not imported: '+errors.join(' '):''}`;const d=after.closest('details');if(d)d.open=true;}
  }
  function refreshQuestions(){renderMain();renderOutline();updateReadiness();}
 
+ // ---------- assignments (saved separately from the week, never published with it) ----------
+ const savedAt=()=>'All changes saved at '+new Date().toLocaleTimeString('en-NG',{timeZone:'Africa/Lagos',hour:'2-digit',minute:'2-digit'});
+ function assignmentChanged(){s.assignDirty=true;status('Unsaved changes');clearTimeout(s.assignTimer);s.assignTimer=setTimeout(saveAssignment,1500);}
+ async function saveAssignment(){
+  const a=currentAssignment();if(!a||!s.assignDirty)return true;
+  clearTimeout(s.assignTimer);s.assignDirty=false;
+  try{
+   const payload=structuredClone(a);delete payload.submissions;delete payload.available;
+   const result=await call('assignment-save',{assignment:payload});
+   a.updatedAt=result.assignment.updatedAt;status(savedAt());return true;
+  }catch(error){s.assignDirty=true;status(error.message);return false;}
+ }
+ function writeAssignment(path,value){
+  const a=currentAssignment();if(!a)return;const key=path.split('.')[1];
+  if(key==='title'){a.title=value;const label=q(`[data-outline-assignment="${CSS.escape(a.id)}"]`);if(label)label.textContent=value||'Untitled assignment';}
+  else if(key==='lesson')a.lessons=value?[value]:[];
+  else if(key==='lessons')a.lessons=[...host.querySelectorAll('[data-path="assign.lessons"]:checked')].map(e=>e.value);
+  else if(key==='max')a.max=Number(value)||0;
+  else if(key==='scope'){a.scope=value;if(value==='LESSON')a.lessons=a.lessons.slice(0,1);if(value==='WEEK_END')a.lessons=[];}
+  else if(key==='mode'){a.mode=value;if(value!=='ONLINE')s.assignTab='write';}
+  else a[key]=value;
+  assignmentChanged();
+  if(key==='mode'){renderMain();renderInspector({force:true});}else if(key==='scope')renderInspector({force:true});
+ }
+ async function selectAssignment(id){
+  if(s.assignDirty&&!await saveAssignment())return;
+  s.assignmentId=id;s.pane='assignment';s.assignTab='write';s.blockId=null;s.equation=null;s.assignIndex=0;s.pendingAssignDelete=null;render();
+ }
+ async function createAssignment(){
+  if(s.assignDirty&&!await saveAssignment())return;
+  const result=await call('assignment-save',{assignment:newAssignment(s.week.id)});
+  s.assignments.push(result.assignment);await selectAssignment(result.assignment.id);
+  const title=q('[data-path="assign.title"]');if(title){title.focus();title.select();}
+  status('New assignment created. It stays locked until you release it.');
+ }
+ async function setRelease(a,body){
+  const result=await call('assignment-release',{id:a.id,...body});
+  Object.assign(a,result.assignment,{available:result.available});renderOutline();renderInspector({force:true});
+  return result;
+ }
+ function openAssignRelease(){
+  const a=currentAssignment();if(!a)return;
+  saveAssignment().then(ok=>{if(ok)showPanel(releasePanelHTML(a));});
+ }
+ async function confirmAssignRelease(){
+  const a=currentAssignment(),note=q('[data-assign-release-note]');if(!a)return;
+  const mode=q('[data-assign-mode]:checked')?.value||'PUBLISHED',at=q('[data-assign-at]')?.value,due=q('[data-assign-due]')?.value;
+  try{
+   const result=await setRelease(a,{status:mode,due:mode==='LOCKED'?a.due:due,releaseAt:mode==='SCHEDULED'&&at?new Date(at).toISOString():null});
+   hidePanel();status(mode==='PUBLISHED'?(result.available?'Released. Students can open it now.':'Released, but it opens when its subtopic is released.'):mode==='SCHEDULED'?'Scheduled.':'Kept locked.');
+  }catch(error){if(note)note.textContent=error.message;status(error.message);}
+ }
+ function openAssignCopy(){
+  const a=currentAssignment();if(!a)return;
+  saveAssignment().then(ok=>{if(ok)showPanel(copyPanelHTML(a,{allocations,context,weekNumber:s.week.id}));});
+ }
+ async function confirmAssignCopy(){
+  const a=currentAssignment(),note=q('[data-copy-note]');if(!a)return;
+  const target={class:q('[data-copy-class]').value,subject:q('[data-copy-subject]').value,week:Number(q('[data-copy-week]').value)};
+  try{
+   await call('assignment-copy',{id:a.id,targets:[target]});
+   const same=target.class===context.class&&target.subject===context.subject;
+   hidePanel();status(`Copied to ${target.class} ${target.subject}, Week ${target.week}. It is locked there until you release it.`);
+   if(same&&target.week===s.week.id){const fresh=await call('assignments?week='+s.week.id);s.assignments=fresh.assignments;renderOutline();}
+  }catch(error){if(note)note.textContent=error.message;status(error.message);}
+ }
+ async function deleteAssignment(){
+  const a=currentAssignment();if(!a)return;
+  if(s.pendingAssignDelete!==a.id){s.pendingAssignDelete=a.id;const b=q('[data-studio="assign-delete"]');if(b)b.textContent='Click again to delete';return;}
+  s.pendingAssignDelete=null;
+  try{await call('assignment-delete',{id:a.id});s.assignments=s.assignments.filter(v=>v!==a);s.assignDirty=false;s.assignmentId=null;s.pane='lesson';render();status('Assignment deleted.');}
+  catch(error){status(error.message);}
+ }
+
  async function close(){
+  if(s.assignDirty&&!await saveAssignment())return;
   if(s.dirty&&!await save()){status('Save failed. Retry saving or choose Discard unsaved edits to close.');if(!q('[data-studio="discard"]'))q('.st-top-actions').insertAdjacentHTML('beforeend',button('discard','Discard unsaved edits'));return;}
   host.close();
  }
@@ -340,7 +432,7 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
   const target=event.target.closest('[data-studio]');if(s.disposed||!target)return;
   event.preventDefault();const action=target.dataset.studio;
   try{
-   if(action==='save')await save();
+   if(action==='save'){await save();await saveAssignment();}
    else if(action==='publish')openPublish();
    else if(action==='publish-pick'&&s.publish){const scope=target.dataset.scope;s.publish.selected=new Set(scope==='none'?[]:s.week.lessons.filter(l=>scope==='all'||!s.releases[l.id]?.available).map(l=>l.id));renderPublish();}
    else if(action==='publish-confirm'&&s.publish){const p=s.publish;if(await save(true,{mode:p.mode,releaseAt:p.releaseAt?new Date(p.releaseAt).toISOString():null,lessons:[...p.selected]}))hidePanel();}
@@ -393,7 +485,18 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    else if(action==='add-practice'){const lesson=current();lesson.questions.push(newQuestion(uid()));s.questionIndex=practiceOf(lesson).length-1;changed();refreshQuestions();}
    else if(action==='add-quiz'){s.week.quiz.push(newQuestion(uid(),'quiz'));s.quizIndex=s.week.quiz.length-1;changed();refreshQuestions();}
    else if(action==='remove-practice'){const lesson=current(),item=practiceOf(lesson)[s.questionIndex];lesson.questions=lesson.questions.filter(v=>v!==item);s.questionIndex=Math.max(0,s.questionIndex-1);changed();refreshQuestions();}
-   else if(/^(duplicate|up|down|import)-(practice|quiz)$/.test(action)){const [verb,prefix]=action.split('-');if(verb==='duplicate')duplicateQuestion(prefix);else if(verb==='import')importQuestions(prefix);else moveQuestion(prefix,verb==='up'?-1:1);}
+   else if(/^(duplicate|up|down|import)-(practice|quiz|assign)$/.test(action)){const [verb,prefix]=action.split('-');if(verb==='duplicate')duplicateQuestion(prefix);else if(verb==='import')importQuestions(prefix);else moveQuestion(prefix,verb==='up'?-1:1);}
+   else if(action==='select-assignment')await selectAssignment(target.dataset.id);
+   else if(action==='new-assignment')await createAssignment();
+   else if(action==='assign-tab'){s.assignTab=target.dataset.tab;s.blockId=null;render();}
+   else if(action==='assign-release')openAssignRelease();
+   else if(action==='assign-release-confirm')await confirmAssignRelease();
+   else if(action==='assign-lock'){const a=currentAssignment();if(a){await setRelease(a,{status:'LOCKED'});status('Locked. Students can no longer open it.');}}
+   else if(action==='assign-copy')openAssignCopy();
+   else if(action==='assign-copy-confirm')await confirmAssignCopy();
+   else if(action==='assign-delete')await deleteAssignment();
+   else if(action==='add-assign'){const a=currentAssignment();if(!a)return;(a.questions??=[]).push(newQuestion(uid(),'assignment'));s.assignIndex=a.questions.length-1;assignmentChanged();refreshQuestions();}
+   else if(action==='remove-assign'){const a=currentAssignment();if(!a)return;a.questions.splice(s.assignIndex,1);s.assignIndex=Math.max(0,s.assignIndex-1);assignmentChanged();refreshQuestions();}
    else if(action==='remove-quiz'){s.week.quiz.splice(s.quizIndex,1);s.quizIndex=Math.max(0,s.quizIndex-1);changed();refreshQuestions();}
    else if(action==='fix-issue')goToIssue(s.issues?.[Number(target.dataset.issue)]);
   }catch(error){status(error.message);}
@@ -419,15 +522,16 @@ export async function openContentStudio({host,context,api,week=1,onPublished,ren
    if(key==='title'){const label=q(`[data-outline-title="${CSS.escape(lesson.id)}"]`);if(label)label.textContent=lessonName(lesson,s.week.lessons.indexOf(lesson));}
    return;
   }
-  if(root==='practice'||root==='quiz')writeQuestion(path,value);
+  if(root==='practice'||root==='quiz'||root==='assign'&&path.split('.')[1]!==undefined&&['prompt','options','answer','answers','accepted','explanation','hint','marks','tolerance','difficulty'].includes(path.split('.')[1]))writeQuestion(path,value);
+  else if(root==='assign')writeAssignment(path,value,el);
  }
  async function onChange(event){
   const el=event.target;
   if(el.matches('[data-publish-lesson]')&&s.publish){el.checked?s.publish.selected.add(el.value):s.publish.selected.delete(el.value);renderPublish();}
   else if(el.matches('[data-publish-mode]')&&s.publish){s.publish.mode=el.value;renderPublish();}
   else if(el.matches('[data-preview-width]'))q('.studio-preview').style.width=el.value;
-  else if(el.dataset.bank){s[el.dataset.bank==='quiz'?'quizIndex':'questionIndex']=Number(el.value);refreshQuestions();}
-  else if(el.dataset.questionKind){const item=questionList(el.dataset.questionKind)[el.dataset.questionKind==='quiz'?s.quizIndex:s.questionIndex];item.kind=el.value;if(item.kind==='choice'||item.kind==='multi')item.options??=['',''];if(item.kind==='multi'){item.answers=[];item.answer='';}else delete item.answers;changed();refreshQuestions();}
+  else if(el.dataset.bank){s[indexField(el.dataset.bank)]=Number(el.value);refreshQuestions();}
+  else if(el.dataset.questionKind){const item=questionList(el.dataset.questionKind)[s[indexField(el.dataset.questionKind)]];item.kind=el.value;if(item.kind==='choice'||item.kind==='multi')item.options??=['',''];if(item.kind==='multi'){item.answers=[];item.answer='';}else delete item.answers;touch(el.dataset.questionKind);refreshQuestions();}
   else if(el.id==='studio-heading'&&s.editor){if(el.value==='0')s.editor.chain().focus().setParagraph().run();else s.editor.chain().focus().setHeading({level:Number(el.value)}).run();focusEditor();}
   else if(el.id==='studio-align'&&s.editor){s.editor.chain().focus().setTextAlign(el.value).run();focusEditor();}
   else if(el.matches('[data-load-week]')){/* opened with the Open button */}

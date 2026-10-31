@@ -158,3 +158,4 @@
 .st-multi{display:grid;gap:6px;border:1px solid var(--line,#d9dee7);border-radius:8px;padding:8px 12px}
 .st-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:480px){.st-row{grid-template-columns:1fr}}
+.st-qimage{display:grid;gap:8px;margin:8px 0}.st-qimage .st-image-thumb{max-width:220px;border-radius:6px}

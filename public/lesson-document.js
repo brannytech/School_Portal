@@ -134,6 +134,6 @@ export function studentLesson(lesson){
  for(const key of ['id','week','order','day','title','minutes','objectives','explain','realLife','experiment','summary','videoUrl','commonMistake','discovery','confidencePrompt','steps'])if(lesson[key]!==undefined)output[key]=structuredClone(lesson[key]);
  if(lesson.example){output.example={};for(const key of ['id','prompt','kind','answer','explanation'])if(lesson.example[key]!==undefined)output.example[key]=structuredClone(lesson.example[key]);}
  try{output.document=documentForLesson(lesson);}catch{output.document={schemaVersion:1,blocks:[{id:'content-error',type:'warning',text:'This lesson content could not be displayed. Please ask your teacher to review it.'}]};}
- output.questions=(lesson.questions||[]).map(q=>Object.fromEntries(['id','prompt','kind','options','difficulty','hint','stage','objective','variables','tolerance','marks'].filter(k=>q[k]!==undefined).map(k=>[k,structuredClone(q[k])])));
+ output.questions=(lesson.questions||[]).map(q=>Object.fromEntries(['id','prompt','image','kind','options','difficulty','hint','stage','objective','variables','tolerance','marks'].filter(k=>q[k]!==undefined).map(k=>[k,structuredClone(q[k])])));
  return output;
 }

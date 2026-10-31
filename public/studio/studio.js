@@ -32,6 +32,7 @@ const ITEMS=[
 const NO_SETTINGS=new Set(['widget','divider']);
 
 export async function openContentStudio({host,context,api,allocations=[],week=1,onPublished,renderWidget,uploadImage}){
+ if(!document.querySelector('link[data-math-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/vendor/katex.min.css';link.dataset.mathStyle='true';document.head.append(link);}
  if(host.open)throw Error('Close the current editor before opening Content Studio.');
  if(!document.querySelector('link[data-studio-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/content-studio.css';link.dataset.studioStyle='true';document.head.append(link);}
  const editorModule=await import('/vendor/lesson-editor.js');
@@ -314,6 +315,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   const parts=path.split('.'),prefix=parts[0],key=parts[1],item=questionList(prefix)[s[indexField(prefix)]];if(!item)return;
   if(key==='options'||key==='accepted')item[key]=value.split('\n');
   else if(key==='answers'){item.answers=[...host.querySelectorAll(`[data-path="${prefix}.answers"]:checked`)].map(e=>e.value);item.answer=item.answers.join('|');}
+  else if(key==='imageAlt'){if(item.image)item.image.alt=value;}
   else if(key==='marks'||key==='tolerance'){if(value===''||!Number.isFinite(Number(value)))delete item[key];else item[key]=Number(value);}
   else item[key]=value;
   touch(prefix);
@@ -482,6 +484,12 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
    }
    else if(action==='apply-link'){const href=safeLink(q('[data-link-url]').value);if(!href)throw Error('Use a full HTTPS or mailto address.');hidePanel();s.editor.chain().focus().setLink({href}).run();focusEditor();}
    else if(action==='remove-link'){hidePanel();s.editor?.chain().focus().unsetLink().run();focusEditor();}
+   else if(action.startsWith('qimage-pick-')||action.startsWith('qimage-remove-')){
+    const prefix=action.split('-')[2],item=questionList(prefix)[s[indexField(prefix)]];if(!item)return;
+    if(action.startsWith('qimage-remove-'))delete item.image;
+    else{if(!uploadImage)throw Error('Image upload is not available here.');const file=await pickImageFile();if(!file)return;status('Uploading picture…');const fileId=await uploadLessonImage(file,uploadImage);item.image={fileId,alt:item.image?.alt||''};status('Picture added. Describe it for learners who cannot see it.');}
+    touch(prefix);refreshQuestions();
+   }
    else if(action==='add-practice'){const lesson=current();lesson.questions.push(newQuestion(uid()));s.questionIndex=practiceOf(lesson).length-1;changed();refreshQuestions();}
    else if(action==='add-quiz'){s.week.quiz.push(newQuestion(uid(),'quiz'));s.quizIndex=s.week.quiz.length-1;changed();refreshQuestions();}
    else if(action==='remove-practice'){const lesson=current(),item=practiceOf(lesson)[s.questionIndex];lesson.questions=lesson.questions.filter(v=>v!==item);s.questionIndex=Math.max(0,s.questionIndex-1);changed();refreshQuestions();}

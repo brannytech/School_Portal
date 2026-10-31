@@ -89,7 +89,8 @@ Original brief:
 - Remove the duplicate assignment form from `public/weekly-course.js`.
 - Tests: save/publish/schedule/lock, student can/cannot open, due-date lateness, image in instructions served by `/api/media`.
 
-### Step D. Stage 7: retire duplicates, docs, final checks, pull request
+### Step D. Stage 7: retire duplicates, docs, final checks, pull request (DONE except final run and PR)
+Done: duplicates retired, clean-install end-to-end test, teacher empty-state hint, docs and Studio guide, cache bumped to v21.
 - Remove the old builder `public/weekly-course.js` authoring UI, `/api/course` POST endpoints, per-week `unlock` endpoint and buttons, and the older release UI in `public/upgrade.js` (`advanced-release`). Keep `term-lock` (admin master switch) and `releaseState` fallback only if existing data needs it (clean installs do not).
 - Admin screens: confirm **Add student / teacher**, **Assign a subject**, CSV import still work on a clean install; add an empty-state hint on the teacher dashboard ("Open Lesson Studio to create Week 1").
 - Update `README.md`, `USER_GUIDE.md`, `DEPLOYMENT.md`, `.env.example`, `docs/` (Studio guide with screenshots).

@@ -32,7 +32,7 @@ See **Quick start for a real school** in [DEPLOYMENT.md](DEPLOYMENT.md): `npm ru
 
 ## This upgrade
 
-Current modernisation stage: **Phase 3 - Interactive Mathematics and blank templates complete within documented scope**. Teachers can start with zero content/questions, design their own lessons, and add editable graphs, sliders and mathematics toolkits. See the [teacher guide](docs/INTERACTIVE_MATHEMATICS.md) and [acceptance report](docs/PHASE_3_REPORT.md). **Next: Phase 4 - Advanced question authoring, not started.** After updating, run `npm run build`, restart the server and refresh. Local editor/math assets are generated under `public/vendor/`; no runtime CDN is needed.
+Current stage: **Lesson Studio v2 (clean platform)**. Teachers write weeks, lessons, questions and assignments in one Lesson Studio, release per lesson or per week, and release assignments after teaching. See the [Lesson Studio guide](docs/LESSON_STUDIO_GUIDE.md) and the [implementation plan](docs/NEXT_STEPS_PLAN.md). After updating, run `npm run build`, restart the server and refresh. Local editor/math assets are generated under `public/vendor/`; no runtime CDN is needed.
 
 - Replaces JSON persistence with a real relational database and versioned migrations. SQLite runs locally; PostgreSQL is configurable for deployment. Existing local records are imported once and the original JSON file is retained.
 - Academic sessions, enrolment/promotion history, term archives and daily lesson publication/release rules.
@@ -57,6 +57,7 @@ Tests build the domain code and use isolated fictional databases. The maths comm
 
 - [Deployment, configuration, bootstrap, backup and restore](DEPLOYMENT.md)
 - [Administrator, teacher and student guide](USER_GUIDE.md)
+- [Lesson Studio guide](docs/LESSON_STUDIO_GUIDE.md)
 - [Completed / partial / unverified requirements](IMPLEMENTATION_STATUS.md)
 - [Development progress and quality gates](DEVELOPMENT_PROGRESS.md)
 - [Architecture decisions](DECISIONS.md)

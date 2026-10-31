@@ -27,6 +27,7 @@ Lesson Studio is the one place where teachers write weeks, lessons, practice que
 - **Written like a lesson**: the instructions use the same editor, including equations and images.
 - **Release**: new assignments are **locked**. Release them after teaching in class (now or scheduled). Release is separate from lesson release.
 - **Auto-grading** (online only): *Immediately* shows the score on submit, or *After review* waits for the teacher. Scores count toward progress and monitoring.
+- **Late work**: online work handed in after the due date is still marked straight away, flagged *Late*, and counted in the teacher's monitoring view (per student, next to assignments submitted).
 - **Copy**: copy an assignment to any class or subject you teach; the copy starts locked.
 - **Due date** is optional while an assignment is a draft or locked, and required when it is released.
 

@@ -80,6 +80,8 @@ test('review fixes: quiz start hides answer keys, student state hides per-questi
   assert.equal(late.value.late,true);assert.equal(late.value.graded,true);assert.equal(late.value.score,10);
   const lateSub=(await req('state',null,student)).value.submissions.find(v=>v.assignment===lid);
   assert.equal(lateSub.late,true);assert.equal(lateSub.status,'Marked');assert.match(lateSub.feedback,/late/i);
+  const mon=await req('monitoring?week=all&pageSize=50',null,teacher);assert.equal(mon.status,200,JSON.stringify(mon.value));
+  const row=mon.value.students.find(v=>v.lateSubmissions>0);assert(row,'monitoring shows the late submission');assert.equal(row.lateSubmissions,1);
   // 0.25 + 0.25 marks, both right: full credit, not half.
   const mark=(await req('state',null,teacher)).value.submissions.find(v=>v.assignment===id);assert.equal(mark.autoScore,10,'small marks score out of the real total');
  }finally{server.kill();}

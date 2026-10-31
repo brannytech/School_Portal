@@ -7,9 +7,8 @@ import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
 import {studentApi} from './student-api.mjs';
 import {monitoringApi} from './monitoring.mjs';
-import {weeklyContentApi,assignmentOpen,closingOpen,prepareAssignment,studentAssignment} from './weekly-content.mjs';
+import {weeklyContentApi,assignmentOpen,closingOpen,studentAssignment} from './weekly-content.mjs';
 import {recordStudentPresence} from './presence.mjs';
-import {rememberLearningReleases} from './learning-releases.mjs';
 import {adminDirectory} from './admin-directory.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
@@ -17,7 +16,7 @@ import {durableSessions} from './database.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
 import {checkAnswer,gradeAssessment,masteryBand,calculate} from './dist/domain.js';
 import {summariseResults} from './dist/results.js';
-import {studentLesson,contentRevision,mergeWeekContent,validateWeekDocuments} from './lesson-document.mjs';
+import {studentLesson,contentRevision} from './lesson-document.mjs';
 const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
 const sessions=durableSessions(sql),rates=new Map(),uploadTokens=new Map(),secret=db.appSecret;
 const demo=process.env.NODE_ENV!=='production'&&process.env.DEMO_MODE==='true';
@@ -154,30 +153,7 @@ async function handle(req,res){
  if(u.role==='STUDENT')fail(403,'Teacher or administrator access required.');
  scope(u,c,s);
  if(endpoint==='course'&&method==='GET'){const weeks=course(c,s,t);res.setHeader('X-Content-Revision',contentRevision(weeks));json(weeks);return;}
- if(endpoint==='course'&&method==='POST'){
-  const input=b.weeks;if(!Array.isArray(input)||input.length>20)fail(400,'Provide an array of up to 20 weeks.');
-  const ids=new Set();
-  const validQuestion=q=>q&&typeof q.id==='string'&&typeof q.prompt==='string'&&['string','number'].includes(typeof q.answer)&&typeof q.explanation==='string'&&['numeric','choice','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind)&&(q.kind!=='choice'||Array.isArray(q.options)&&q.options.map(String).includes(String(q.answer)));
-  for(const w of input){
-   validateWeekDocuments(w);
-   if(!Number.isInteger(w.id)||w.id<1||w.id>52||ids.has(w.id)||typeof w.title!=='string'||w.lessons.length<1||w.lessons.length>7||!Array.isArray(w.quiz)||w.quiz.length<10||!w.quiz.every(validQuestion))fail(400,'Each week needs a unique number, a title, 1–7 lessons and at least 10 valid quiz questions.');
-   ids.add(w.id);const lessonIds=new Set();
-   for(const l of w.lessons){
-    const contentValid=l.document?l.document.blocks.length>0:Array.isArray(l.objectives)&&l.explain&&l.realLife&&Array.isArray(l.summary)&&validQuestion(l.example);
-    if(typeof l.id!=='string'||!l.id.startsWith(w.id+'-')||lessonIds.has(l.id)||!l.title||!contentValid||!Array.isArray(l.questions)||l.questions.length<12||!l.questions.every(validQuestion))fail(400,'Each lesson needs its week-prefixed ID, title, valid teaching content and at least 12 valid questions.');
-    lessonIds.add(l.id);const questionIds=l.questions.map(q=>q.id);if(new Set(questionIds).size!==questionIds.length)fail(400,'Question IDs must be unique within a lesson.');
-   }
-   if(new Set(w.quiz.map(q=>q.id)).size!==w.quiz.length)fail(400,'Weekly quiz question IDs must be unique.');
-  }
-  const previous=course(c,s,t);
-  if(b.revision!==contentRevision(previous))fail(409,'This course was changed or its revision is missing. Reopen the course before publishing.');
-  const prepared=input.map(w=>{validateWeekDocuments(w);const merged=mergeWeekContent(w,previous.find(old=>old.id===w.id));validateWeekDocuments(merged);return {...merged,updatedAt:new Date().toISOString(),publicationId:randomUUID()};});
-  db.weekVersions??=[];for(const old of previous)db.weekVersions.push({id:randomUUID(),sessionId:academicSession(),class:c,subject:s,term:t,week:old.id,content:structuredClone(old),teacher:u.id,created:new Date().toISOString()});
-  db.courses??={};db.courses[scopeKey(c,s,t)]=prepared;audit(u,`Published ${input.length} content weeks for ${c}:${s}:${t}`);await save();json({ok:true,revision:contentRevision(course(c,s,t))});return;
- }
- if(endpoint==='unlock'&&method==='POST'){await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);if(!course(c,s,t).some(w=>w.id===Number(b.week)))fail(400,'Invalid week.');const key=scopeKey(c,s,t),set=new Set(db.unlocks[key]||[]);if(b.unlocked)set.add(Number(b.week));else set.delete(Number(b.week));db.unlocks[key]=[...set];audit(u,`${b.unlocked?'Unlock':'Lock'} week ${b.week}, ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({ok:true});return;}
  if(endpoint==='term-lock'&&method==='POST'){if(u.role!=='ADMIN')fail(403,'Admin access required.');const key=scopeKey(c,s,t);db.termLocks=db.termLocks.filter(v=>v!==key);if(b.locked)db.termLocks.push(key);audit(u,`${b.locked?'Lock':'Open'} term ${key}`);await save();json({ok:true});return;}
- if(endpoint==='assignment'&&method==='POST'){if(b.week&&(!Number.isInteger(Number(b.week))||!course(c,s,t).some(w=>w.id===Number(b.week))))fail(400,'Choose a valid assignment week.');const a=prepareAssignment(b,{sessionId:academicSession(),class:c,subject:s,term:t},u.id,fail);db.assignments.push(a);await save();json(a);return;}
  if(endpoint==='resubmission'&&method==='POST'){const a=db.assignments.find(v=>v.id===b.id);if(!a)fail(404,'Assignment not found.');scope(u,a.class,a.subject);a.resubmission=!!b.enabled;await save();json({ok:true});return;}
  if(endpoint==='mark'&&method==='POST'){const sub=db.submissions.find(v=>v.id===b.id);if(!sub)fail(404,'Submission not found.');scope(u,sub.class,sub.subject);const score=Number(b.score);const maximum=sub.max||(sub.kind==='note'?db.policy.noteMaximum:100);if(!Number.isFinite(score)||score<0||score>maximum)fail(400,'Enter a score from 0 to '+maximum+'.');db.markingHistory.push({id:randomUUID(),submission:sub.id,teacher:u.id,before:structuredClone(sub),created:new Date().toISOString()});const rubric={};for(const [name,value]of Object.entries(b.rubric||{})){if(!['Completeness','Accuracy','Organisation','Legibility','Timeliness'].includes(name)||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>5)fail(400,'Rubric criteria must be between 0 and 5.');rubric[name]=Number(value);}Object.assign(sub,{score,max:maximum,rubric,feedback:needed(text(b.feedback),'Feedback'),status:['Needs redo','Returned for correction'].includes(b.status)?'Returned for correction':'Marked',markedAt:new Date().toISOString()});notify(sub.student,'Your work has been reviewed',sub.feedback,sub.kind==='note'?'notes':'assignments');audit(u,'Marked submission '+sub.id);await save();json(sub);return;}
  if(endpoint==='score'&&method==='POST'){const student=db.users.find(v=>v.id===b.student&&v.role==='STUDENT'&&v.class===c);if(!student)fail(400,'Choose a student in this class.');const score=Number(b.score),max=Number(b.max);if(!Number.isFinite(score)||!Number.isFinite(max)||max<=0||score<0||score>max)fail(400,'Check the score and maximum.');db.scores.push({id:randomUUID(),student:student.id,class:c,subject:s,term:t,type:b.type==='Exam'?'Exam':'Test',score,max,remark:text(b.remark),published:!!b.published,title:text(b.title)||'Class assessment',date:text(b.date)||new Date().toISOString().slice(0,10),teacher:u.id});audit(u,'Created draft '+b.type+' result');await save();json({ok:true});return;}

@@ -68,16 +68,11 @@ test('Phase 1: documents, conflicts, legacy preservation and recovery through re
    const result=await req('assessment/submit',{id:attempt.id,answers:Object.fromEntries(attempt.questions.map(q=>[q.id,'2']))},student);assert.equal(result.value.percentage,100);
    assert.equal(contentRevision((await req('course',null,teacher)).value.filter(w=>w.id!==9)),contentRevision(baseline));
   });
-  await t.test('Legacy full-course route validates documents, requires revision, archives prior content and invalidates stale draft bases',async()=>{
+  await t.test('Weekly publication requires the current revision and invalidates stale draft bases',async()=>{
    const info=(await req('weekly-template?week=9',null,teacher)).value;
    const saved=await req('weekly-template',{week:info.published,revision:info.revision,publish:false},teacher);assert.equal(saved.status,200);
    draftRevision=saved.value.draftRevision;const oldBase=info.revision;
-   const course=await req('course',null,teacher);const bad=structuredClone(course.value);bad[0].lessons[0].document={schemaVersion:1,blocks:[{id:'bad',type:'paragraph',text:'hello',answer:'secret'}]};
-   const rejected=await req('course',{weeks:bad,revision:course.revision},teacher);assert.equal(rejected.status,400);
-   assert.equal((await req('course',null,teacher)).revision,course.revision);
-   assert.equal((await req('course',{weeks:course.value},teacher)).status,409);
-   const valid=await req('course',{weeks:course.value,revision:course.revision},teacher);assert.equal(valid.status,200,valid.value.error);
-   assert.equal((await req('course',{weeks:course.value,revision:course.revision},teacher)).status,409);
+   const valid=await req('weekly-template',{week:{...info.published,title:info.published.title+' (revised)'},revision:info.revision,draftRevision,publish:true,assignments:[]},teacher);assert.equal(valid.status,200,valid.value.error);
    assert.equal((await req('weekly-template',{week:info.published,revision:oldBase,draftRevision,publish:true,assignments:[]},teacher)).status,409);
    await req('lesson-release',{lesson:draft.lessons[0].id,status:'LOCKED'},teacher);assert.equal((await req('lesson/'+draft.lessons[0].id,null,student)).status,403);
    await req('lesson-release',{lesson:draft.lessons[0].id,status:'UNLOCKED'},teacher);

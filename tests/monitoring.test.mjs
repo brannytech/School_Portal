@@ -49,7 +49,6 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('content-read',{lesson:'2-1'},student)).status,403);
    assert.equal((await req('content-read',{lesson:'1-1'},teacher)).status,403);
    assert.equal((await req('lesson-release',{lesson:'2-1',status:'UNLOCKED'},teacher)).status,200);
-   assert.equal((await req('unlock',{week:2,unlocked:true},teacher)).status,200);
    const latest=(await req('monitoring?student=student',null,teacher)).value;
    assert.equal(latest.latestWeek,2);assert.equal(latest.currentWeek,2);assert.equal(latest.detail.done,0);assert.equal(latest.detail.total,42);
    assert.equal(latest.detail.comparison.previous.id,1);assert.equal(latest.detail.comparison.previous.done,11);assert.equal(latest.detail.comparison.change,-25);
@@ -71,9 +70,7 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    assert.equal((await req('monitoring?week=all&student=student',null,teacher)).value.detail.done,12);
   });
   await t.test('Relocking weeks preserves their progress and release history across restart',async()=>{
-   await req('unlock',{week:1,unlocked:false},teacher);
    await req('lesson-release',{lesson:'2-1',status:'LOCKED'},teacher);
-   await req('unlock',{week:2,unlocked:false},teacher);
    assert.equal((await req('content-read',{lesson:'2-1'},student)).status,403);
    await stop();await start();
    const data=(await req('monitoring?week=all&student=student',null,teacher)).value;
@@ -90,9 +87,9 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
   });
   await t.test('Assignments can be linked to a real learning week',async()=>{
    const assignment={title:'Weekly task',instructions:'Complete the exercise.',due:'2026-11-01',class:'SS1',subject:'Mathematics',term:1};
-   assert.equal((await req('assignment',{...assignment,week:999},teacher)).status,400);
-   assert.equal((await req('assignment',{...assignment,week:'bad'},teacher)).status,400);
-   assert.equal((await req('assignment',{...assignment,week:1},teacher)).value.week,1);
+   assert.equal((await req('assignment-save',{...assignment,week:999},teacher)).status,400);
+   assert.equal((await req('assignment-save',{...assignment,week:'bad'},teacher)).status,400);
+   assert.equal((await req('assignment-save',{...assignment,week:1},teacher)).value.week,1);
   });
   await t.test('Optional notes retain their weeks and correction history without affecting progress',async()=>{
    const beforeNotes=(await req('my-progress?week=1',null,student)).value.detail;
@@ -107,7 +104,6 @@ test('Scoped student monitoring, accurate work counts and durable last seen',asy
    const upload=await fetch(root+token.url,{method:'PUT',headers:{Cookie:student.cookie,'X-CSRF-Token':student.csrf},body:png});assert.equal(upload.status,200);const file=(await upload.json()).id;
    const note={kind:'note',date:'2026-10-18',frequency:'Daily',files:[file]};
    for(const week of [undefined,999,2])assert.equal((await req('submit',{...note,week},student)).status,400);
-   await req('unlock',{week:1,unlocked:true},teacher);
    const submitted=await req('submit',{...note,week:1},student);assert.equal(submitted.status,201);assert.equal(submitted.value.week,1);
    assert.equal((await req('submit',{...note,week:1},student)).status,409);
    await req('mark',{id:submitted.value.id,score:5,status:'Returned for correction',feedback:'Add the definitions.'},teacher);

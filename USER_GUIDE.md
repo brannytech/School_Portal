@@ -2,13 +2,13 @@
 
 ## Current stage — Interactive Mathematics and blank templates, 23 October 2026
 
-Open **Teaching workspace → Open Content Studio**, select a week and choose **Start blank template**. Start with an empty subtopic and no content, practice or quiz questions. Add your own blocks and questions, preview, save and publish; Undo can reverse the blank replacement before closing. The current publication stays available until you publish the replacement. New subtopics also start empty. Existing publication requirements still apply.
+Open **Teaching workspace → Edit in Lesson Studio**, select a week and choose **Start blank template**. Start with an empty subtopic and no content, practice or quiz questions. Add your own blocks and questions, preview, save and publish; Undo can reverse the blank replacement before closing. The current publication stays available until you publish the replacement. New subtopics also start empty. Existing publication requirements still apply.
 
 Insert **Interactive graph** for editable functions, charts and coefficient sliders, or **Mathematics toolkit** for matrices, geometry and other explorations. Student changes and graph practice feedback are local; official marks are unchanged. Follow the [blank-template and mathematics guide](docs/INTERACTIVE_MATHEMATICS.md). Phase 3 passes its local gate; Phase 4 remains next. Earlier guide entries below are historical.
 
 ## Current stage — Teacher Content Studio, 23 October 2026
 
-Phase 2 is complete within its [reported scope](docs/PHASE_2_REPORT.md). As an assigned teacher or administrator, choose the academic session/class/subject/term, then **Teaching workspace → Open Content Studio**. Create or select a week/subtopic, edit blocks and formatted text, add visual equations, preview, save a private draft and publish. History can restore a publication as a new draft. See the [studio guide](docs/TEACHER_CONTENT_STUDIO.md) for controls, conflict recovery and memory-only offline editing.
+Phase 2 is complete within its [reported scope](docs/PHASE_2_REPORT.md). As an assigned teacher or administrator, choose the academic session/class/subject/term, then **Teaching workspace → Edit in Lesson Studio**. Create or select a week/subtopic, edit blocks and formatted text, add visual equations, preview, save a private draft and publish. History can restore a publication as a new draft. See the [Lesson Studio guide](docs/LESSON_STUDIO_GUIDE.md) and the [studio reference](docs/TEACHER_CONTENT_STUDIO.md) for controls, conflict recovery and memory-only offline editing.
 
 Students read released content through the usual learning page, including typeset equations. The legacy weekly form remains available; its structured-text fields stay protected. Earlier dated guide entries below describe previous phases. **Next: Phase 3 — Interactive Mathematics, not started.**
 
@@ -109,7 +109,7 @@ Notebook uploads are optional and do not appear in learning progress, week compa
 ### Weekly topics, subtopics and lesson templates
 Students open Learn, choose a bold subtopic title and work through its content, examples, optional experiment/video and end-of-subtopic practice. Previous/next navigation and a subtopic selector appear above and below the lesson. The final subtopic ends with one weekly topic quiz followed by one weekly reflection. The weekly list also links directly to the quiz and reflection. These open only when all subtopics in that week have been released.
 
-Teachers and admins open Teaching workspace or School management → Open weekly lesson template. Load an existing week, or enter a new week number and load it to start a new plan. Add/reorder subtopics, learning content, objectives, examples, YouTube links, practice questions, a weekly quiz, reflection prompt and multiple assignments. Drafts are private; incomplete drafts can be saved. Publish updates only the selected week. Uncheck Release this week to publish it in a locked state. Load published version restores the editor from the current published content. Existing records and question/subtopic IDs are preserved when editing existing items; earlier published versions are saved.
+Weeks, lessons, questions and assignments are all written in Lesson Studio. See the [Lesson Studio guide](docs/LESSON_STUDIO_GUIDE.md). The old weekly template form has been removed.
 
 Paste an HTTPS YouTube watch, short, share or embed URL into a subtopic’s video field. The lesson renders an embedded player inside the app. Teacher-entered content is plain text; raw HTML is not required.
 

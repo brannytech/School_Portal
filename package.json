@@ -13,6 +13,8 @@
     "test": "node --experimental-sqlite --test tests/*.test.mjs",
     "verify-studio-v2": "node scripts/verify-studio-v2.mjs",
     "verify-studio-interactive": "node scripts/verify-studio-interactive.mjs",
+    "verify-assignments": "node scripts/verify-assignments.mjs",
+    "verify-questions": "node scripts/verify-questions.mjs",
     "verify-studio-a11y": "node scripts/verify-studio-a11y.mjs",
     "verify-math": "node scripts/verify-math/index.mjs && node scripts/verify-math/curriculum.mjs",
     "build": "tsc && node scripts/build-editor.mjs && node scripts/check-build.mjs",

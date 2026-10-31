@@ -5,6 +5,7 @@ import {rememberLearningReleases} from './learning-releases.mjs';
 import {contentRevision,mergeWeekContent,validateWeekDocuments,assignDraftIds} from './lesson-document.mjs';
 import {validateLessonDocument} from './public/lesson-document.js';
 import {validateDocumentMath} from './math-content.mjs';
+import {gradeAssessment} from './dist/domain.js';
 
 const clean=(v,n=15000)=>String(v??'').trim().slice(0,n);
 export function youtubeId(value){
@@ -16,14 +17,28 @@ export function assignmentOpen(a,course,releaseState,scopeKey){
  if(status==='SCHEDULED'&&!(Date.parse(a.releaseAt)<=Date.now()))return false;
  if(!a.week)return true; // Historical, unlinked assignments remain readable.
  const week=course(a.class,a.subject,a.term).find(w=>w.id===Number(a.week));
- return !!week?.lessons.some(l=>releaseState(a.class,a.subject,a.term,l.id,scopeKey).available);
+ if(!week)return false;
+ const live=id=>releaseState(a.class,a.subject,a.term,id,scopeKey).available;
+ // A lesson assignment waits for its own lesson; general and end-of-week work waits for any lesson of the week.
+ if(a.scope==='LESSON'&&a.lessons?.length)return week.lessons.some(l=>l.id===a.lessons[0])&&live(a.lessons[0]);
+ return week.lessons.some(l=>live(l.id));
 }
 export function closingOpen(week,c,s,t,releaseState,scopeKey){return !!week?.lessons.length&&week.lessons.every(l=>releaseState(c,s,t,l.id,scopeKey).available);}
 
 function question(input,id,fail){
  const q={...input,id:clean(input?.id,100)||randomUUID(),prompt:clean(input?.prompt),kind:input?.kind||'short',answer:clean(input?.answer,2000),explanation:clean(input?.explanation),stage:input?.stage||'practice',difficulty:input?.difficulty||'Beginner'};
- if(!q.prompt||!q.answer||!q.explanation||!['numeric','choice','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind))fail(400,'Every question needs a prompt, answer, answer type and explanation.');
+ if(!q.prompt||(!q.answer&&q.kind!=='multi')||!q.explanation||!['numeric','choice','multi','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind))fail(400,'Every question needs a prompt, answer, answer type and explanation.');
  if(q.kind==='choice'){q.options=(input.options||[]).map(v=>clean(v,1000));if(q.options.length<2||!q.options.includes(q.answer))fail(400,'Multiple-choice answers must match one of at least two options.');}
+ if(q.kind!=='multi')delete q.answers;
+ if(q.kind==='multi'){
+  q.options=(input.options||[]).map(v=>clean(v,1000));q.answers=(Array.isArray(input.answers)?input.answers:String(input.answer||'').split('|')).map(v=>clean(v,1000)).filter(Boolean);
+  if(q.options.length<2||q.options.some(v=>v.includes('|')))fail(400,'Multiple-answer questions need at least two choices, and a choice cannot contain the | character.');
+  if(!q.answers.length||q.answers.some(v=>!q.options.includes(v)))fail(400,'Choose at least one correct answer, from the listed choices.');
+  q.answer=q.answers.join('|');
+ }
+ if(Array.isArray(input.accepted)&&q.kind!=='multi'&&q.kind!=='choice'&&q.kind!=='boolean'){q.accepted=input.accepted.map(v=>clean(v,500)).filter(Boolean).slice(0,20);if(!q.accepted.length)delete q.accepted;}
+ if(input.marks!==undefined){const marks=Number(input.marks);if(!Number.isFinite(marks)||marks<=0||marks>100)fail(400,'Marks must be a number from 1 to 100.');q.marks=Math.round(marks*100)/100;}
+ if(input.hint!==undefined)q.hint=clean(input.hint,1000);
  if(q.kind==='boolean'&&!['true','false'].includes(q.answer.toLowerCase()))fail(400,'True/false answers must be true or false.');
  if(Array.isArray(input.variables))q.variables=input.variables.map(v=>clean(v,30));if(Number.isFinite(input.tolerance)&&input.tolerance>=0)q.tolerance=input.tolerance;
  return q;
@@ -49,16 +64,54 @@ function prepareWeek(input,fail,only=null){
  if(new Set(week.quiz.map(q=>q.id)).size!==week.quiz.length)fail(400,'Weekly quiz question IDs must be unique.');return week;
 }
 function releaseWarnings(week,targets){const out=[];for(const l of week.lessons)if(targets.has(l.id)&&!l.questions.length)out.push(`${l.title}: no practice questions yet.`);if(!week.quiz.length)out.push('This week has no weekly quiz yet.');return out;}
+const SCOPES=['LESSON','GENERAL','WEEK_END'],MODES=['PHOTO','ONLINE'];
+// Plain text of a lesson-style document (used as the readable fallback for instructions).
+export function documentText(document){
+ const flat=node=>!node?'':node.type==='text'?node.text||'':node.type==='inlineMath'?node.attrs?.latex||'':(node.content||[]).map(flat).join(node.type==='doc'?'\n':'');
+ return (document?.blocks||[]).map(block=>block.type==='rich-text'?flat(block.content):block.text||block.latex||block.caption||'').filter(Boolean).join('\n').trim();
+}
 export function prepareAssignment(b,ctx,teacher,fail,previous){
  const status=b.status||previous?.status||'PUBLISHED',week=Number(b.week||previous?.week);
  if(!['DRAFT','LOCKED','PUBLISHED','SCHEDULED'].includes(status))fail(400,'Choose draft, locked, published or scheduled.');
  if(b.releaseAt&&!Number.isFinite(Date.parse(b.releaseAt)))fail(400,'Choose a valid release date and time.');
- const due=clean(b.due,40),max=Number(b.max||100),releaseAt=b.releaseAt?new Date(b.releaseAt).toISOString():null;
- if(!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(due)||!Number.isFinite(Date.parse(due))||max<=0||max>1000||!Number.isFinite(max))fail(400,'Set a valid deadline and maximum score.');
+ const open=status==='PUBLISHED'||status==='SCHEDULED',max=Number(b.max??previous?.max??100),releaseAt=b.releaseAt?new Date(b.releaseAt).toISOString():null;
+ const due=clean(b.due??'',40);
+ // A deadline is needed once students can see the work; drafts and locked work may leave it open.
+ if(due||open){if(!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(due)||!Number.isFinite(Date.parse(due)))fail(400,'Set a valid deadline.');}
+ if(!Number.isFinite(max)||max<=0||max>1000)fail(400,'Set a maximum score between 1 and 1000.');
  if(status==='SCHEDULED'&&!releaseAt)fail(400,'Choose a release date and time.');
- const title=clean(b.title,200),instructions=clean(b.instructions);if(!title||!instructions)fail(400,'Add an assignment title and instructions.');
- return {...previous,id:previous?.id||randomUUID(),...ctx,teacher:previous?.teacher||teacher,week:week||null,title,instructions,due,max,status,releaseAt,workDate:clean(b.workDate,30),relatedTopic:clean(b.relatedTopic,200),type:clean(b.type,100)||'Written homework',resubmission:!!b.resubmission,publishedAt:status==='PUBLISHED'?(previous?.publishedAt||new Date().toISOString()):previous?.publishedAt||null,updatedAt:new Date().toISOString()};
+ const title=clean(b.title,200);if(!title)fail(400,'Add an assignment title.');
+ const scope=SCOPES.includes(b.scope)?b.scope:previous?.scope||'GENERAL',mode=MODES.includes(b.mode)?b.mode:previous?.mode||'PHOTO';
+ let document;
+ if(b.document!==undefined&&b.document!==null){
+  try{document=validateLessonDocument(b.document,{lenient:!open});validateDocumentMath(document);}catch(error){fail(400,error.message);}
+ }else document=previous?.document;
+ const instructions=clean(b.instructions)||(document?documentText(document):'')||previous?.instructions||'';
+ if(open&&!instructions&&!document?.blocks?.length)fail(400,'Write the assignment instructions before releasing it.');
+ if(!instructions&&status!=='DRAFT'&&status!=='LOCKED')fail(400,'Add assignment instructions.');
+ const lessons=Array.isArray(b.lessons)?[...new Set(b.lessons.map(v=>clean(v,100)).filter(Boolean))].slice(0,30):previous?.lessons||[];
+ if(scope==='LESSON'&&lessons.length!==1)fail(400,'Choose the one subtopic this assignment follows, or make it a general assignment.');
+ let questions=previous?.questions||[];
+ if(b.questions!==undefined){
+  if(!Array.isArray(b.questions)||b.questions.length>100)fail(400,'Add up to 100 questions to an assignment.');
+  // Drafts keep half-written questions; the full check runs when the assignment is released.
+  const KEEP=['id','prompt','kind','answer','answers','accepted','options','explanation','hint','tolerance','marks','difficulty','variables'];
+  questions=b.questions.map((q,i)=>open?{...question(q,'assignment-'+(i+1),fail),stage:'assignment'}:{...Object.fromEntries(KEEP.filter(k=>q?.[k]!==undefined).map(k=>[k,typeof q[k]==='string'?clean(q[k],2000):structuredClone(q[k])])),id:clean(q?.id,100)||randomUUID(),stage:'assignment'});
+  if(new Set(questions.map(q=>q.id)).size!==questions.length)fail(400,'Question IDs must be unique.');
+ }
+ if(mode==='ONLINE'&&open&&!questions.length)fail(400,'An online assignment needs at least one question.');
+ const autoGrade=['IMMEDIATE','AFTER_REVIEW'].includes(b.autoGrade)?b.autoGrade:previous?.autoGrade||'IMMEDIATE';
+ const showAnswers=b.showAnswers===undefined?previous?.showAnswers??true:!!b.showAnswers;
+ return {...previous,id:previous?.id||randomUUID(),...ctx,teacher:previous?.teacher||teacher,week:week||null,title,instructions,...(document?{document}:{}),scope,lessons,mode,questions,autoGrade,showAnswers,due,max,status,releaseAt,workDate:clean(b.workDate??previous?.workDate,30),relatedTopic:clean(b.relatedTopic??previous?.relatedTopic,200),type:clean(b.type,100)||previous?.type||'Written homework',resubmission:b.resubmission===undefined?!!previous?.resubmission:!!b.resubmission,publishedAt:status==='PUBLISHED'?(previous?.publishedAt||new Date().toISOString()):previous?.publishedAt||null,updatedAt:new Date().toISOString()};
 }
+// What a student may receive: no answers, accepted alternatives or explanations.
+const SAFE_QUESTION=['id','prompt','kind','options','difficulty','hint','stage','variables','tolerance','marks'];
+export function studentAssignment(a){
+ const out=Object.fromEntries(['id','week','title','subject','class','term','due','max','status','type','scope','lessons','mode','resubmission','autoGrade','showAnswers','document','instructions','workDate','relatedTopic','releaseAt'].filter(k=>a[k]!==undefined).map(k=>[k,structuredClone(a[k])]));
+ out.questions=(a.questions||[]).map(q=>Object.fromEntries(SAFE_QUESTION.filter(k=>q[k]!==undefined).map(k=>[k,structuredClone(q[k])])));
+ return out;
+}
+const lateness=a=>!!a.due&&Date.now()>Date.parse(a.due.length===10?a.due+'T23:59:59+01:00':a.due);
 
 export async function weeklyContentApi(x){
  const {endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}=x;
@@ -134,12 +187,6 @@ export async function weeklyContentApi(x){
   for(const a of prepared){const index=db.assignments.findIndex(v=>v.id===a.id);if(index<0)db.assignments.push(a);else db.assignments[index]=a;}
   let nextDraft=null;if(pendingEdits.length){nextDraft=randomUUID();db.weekDrafts??={};db.weekDrafts[key+'|'+week.id]={week:input,savedBy:u.id,savedAt:new Date().toISOString(),revision:nextDraft,baseRevision:contentRevision(week),assignments:b.assignments||[]};}else delete db.weekDrafts?.[key+'|'+week.id];audit(u,`Published weekly template ${week.id} for ${key}`);await save();await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);json({published:true,week:week.id,revision:contentRevision(week),draftRevision:nextDraft,pendingEdits,released:[...targets].filter(id=>keep.has(id)),mode:release.mode,warnings:releaseWarnings(week,targets)});return true;
  }
- if(endpoint==='assignment-save'&&method==='POST'){
-  staff();const previous=b.id?db.assignments.find(a=>a.id===b.id&&fits(a)):null;if(b.id&&!previous)fail(404,'Assignment not found.');
-  if(!course(c,s,t).some(w=>w.id===Number(b.week||previous?.week)))fail(400,'Choose an existing learning week.');
-  if(b.releaseAt&&!Number.isFinite(Date.parse(b.releaseAt)))fail(400,'Choose a valid release date.');
-  const a=prepareAssignment(b,ctx,u.id,fail,previous);const index=db.assignments.findIndex(v=>v.id===a.id);if(index<0)db.assignments.push(a);else db.assignments[index]=a;audit(u,`Saved ${a.status} assignment ${a.id}`);await save();json(a);return true;
- }
  if(endpoint==='week-reflection'&&method==='POST'){
   if(u.role!=='STUDENT')fail(403,'Student access required.');termAccess(u,c,s,t);const week=course(c,s,t).find(w=>w.id===Number(b.week));
   if(!closingOpen(week,c,s,t,releaseState,scopeKey))fail(403,'The weekly reflection opens when all subtopics have been released.');
@@ -153,6 +200,79 @@ export async function weeklyContentApi(x){
   if(!week.quiz.length)fail(400,'Your teacher has not added this week’s quiz.');
   const questions=structuredClone(week.quiz),attempt={id:randomUUID(),...ctx,student:u.id,week:week.id,lesson:week.lessons.at(-1).id,kind:'weekly',started:new Date().toISOString(),status:'STARTED',questions,answers:{}};
   db.assessmentAttempts.push(attempt);await save();json({...attempt,questions:questions.map(({answer,explanation,check,...q})=>q),answers:undefined});return true;
+ }
+
+ // ---------- assignments written in Lesson Studio ----------
+ const mine=id=>{staff();const a=db.assignments.find(v=>v.id===id);if(!a)fail(404,'Assignment not found.');scope(u,a.class,a.subject);return a;};
+ // A week that is still a private draft can already have assignments written for it.
+ const weekOf=(week,cc=c,ss=s,tt=t)=>course(cc,ss,tt).find(w=>w.id===Number(week))||db.weekDrafts?.[scopeKey(cc,ss,tt)+'|'+Number(week)]?.week;
+ const checkLinks=(a,week)=>{
+  if(!week)fail(400,'Choose a valid week for this assignment.');
+  for(const id of a.lessons||[])if(!week.lessons.some(l=>l.id===id))fail(400,'An assignment can only follow subtopics from its own week.');
+  for(const block of a.document?.blocks||[])if(block.type==='image'){const f=db.files.find(v=>v.id===block.fileId);if(!f||f.purpose!=='lesson-image'||f.class!==a.class||f.subject!==a.subject||f.sessionId!==a.sessionId)fail(400,'An image in the instructions is missing or belongs to another class. Insert it again.');}
+ };
+ if(endpoint==='assignments'&&method==='GET'){
+  staff();const week=Number(url.searchParams.get('week'));
+  json({assignments:db.assignments.filter(a=>fits(a)&&(!week||Number(a.week)===week)).map(a=>({...a,submissions:db.submissions.filter(v=>v.kind==='assignment'&&v.assignment===a.id).length,available:assignmentOpen(a,course,releaseState,scopeKey)}))});return true;
+ }
+ if(endpoint==='assignment-save'&&method==='POST'){
+  staff();const input=b.assignment||b,previous=input.id?db.assignments.find(v=>v.id===input.id&&fits(v)):null;
+  if(input.id&&!previous)fail(404,'Assignment not found in this class and subject.');
+  const week=weekOf(input.week||previous?.week);
+  // New work starts locked: the teacher releases it in class, once the topic has been taught.
+  const a=prepareAssignment({...input,status:input.status||previous?.status||'LOCKED'},ctx,u.id,fail,previous);
+  checkLinks(a,week);
+  if(previous&&previous.mode==='ONLINE'&&a.mode!=='ONLINE'&&db.submissions.some(v=>v.assignment===a.id))fail(409,'Students already answered this online assignment, so its type cannot change.');
+  if(previous)Object.assign(previous,a);else db.assignments.push(a);
+  audit(u,(previous?'Updated':'Created')+' assignment '+a.id);await save();json({...(previous||a),assignment:previous||a});return true;
+ }
+ if(endpoint==='assignment-release'&&method==='POST'){
+  const a=mine(b.id);if(!fits(a))fail(400,'Open the class this assignment belongs to first.');
+  const status=b.status;if(!['DRAFT','LOCKED','PUBLISHED','SCHEDULED'].includes(status))fail(400,'Choose draft, locked, release now or scheduled.');
+  const next=prepareAssignment({...a,status,releaseAt:status==='SCHEDULED'?b.releaseAt:null,due:b.due??a.due},ctx,u.id,fail,a);
+  checkLinks(next,weekOf(next.week));Object.assign(a,next);
+  audit(u,'Set assignment '+a.id+' to '+status);await save();json({assignment:a,available:assignmentOpen(a,course,releaseState,scopeKey)});return true;
+ }
+ if(endpoint==='assignment-delete'&&method==='POST'){
+  const a=mine(b.id);if(db.submissions.some(v=>v.assignment===a.id))fail(409,'Students have already submitted this assignment. Lock it instead of deleting it.');
+  db.assignments=db.assignments.filter(v=>v!==a);audit(u,'Deleted assignment '+a.id);await save();json({ok:true});return true;
+ }
+ if(endpoint==='assignment-copy'&&method==='POST'){
+  const a=mine(b.id),targets=Array.isArray(b.targets)?b.targets.slice(0,20):[];if(!targets.length)fail(400,'Choose where to copy the assignment.');
+  const made=[];
+  for(const target of targets){
+   const cc=clean(target.class,50)||a.class,ss=clean(target.subject,100)||a.subject,tt=Number(target.term||a.term),week=Number(target.week||a.week);
+   if(![1,2,3].includes(tt))fail(400,'Choose a valid term.');
+   scope(u,cc,ss);const targetWeek=weekOf(week,cc,ss,tt);if(!targetWeek)fail(400,`Week ${week} has no lessons in ${cc} ${ss} yet. Create the week first.`);
+   const copy={...structuredClone(a),id:randomUUID(),class:cc,subject:ss,term:tt,week,teacher:u.id,status:'LOCKED',releaseAt:null,publishedAt:null,due:'',lessons:[],scope:a.scope==='LESSON'?'GENERAL':a.scope,copiedFrom:a.id,updatedAt:new Date().toISOString(),sessionId:a.sessionId};
+   // Images are shared, not re-uploaded: each copy gets its own file record for the new class.
+   const ids=new Map();
+   for(const block of copy.document?.blocks||[])if(block.type==='image'){
+    const source=db.files.find(v=>v.id===block.fileId);if(!source)continue;
+    if(!ids.has(source.id)){const id=randomUUID();db.files.push({...structuredClone(source),id,class:cc,subject:ss,term:tt,student:u.id});ids.set(source.id,id);}
+    block.fileId=ids.get(source.id);
+   }
+   db.assignments.push(copy);made.push({id:copy.id,class:cc,subject:ss,week});
+  }
+  audit(u,'Copied assignment '+a.id+' to '+made.length+' place(s)');await save();json({copies:made});return true;
+ }
+ if(endpoint==='assignment-submit'&&method==='POST'){
+  if(u.role!=='STUDENT')fail(403,'Only students submit work.');termAccess(u,c,s,t);
+  const a=db.assignments.find(v=>v.id===b.assignment&&fits(v));if(!a||a.mode!=='ONLINE')fail(404,'Online assignment not found.');
+  if(!assignmentOpen(a,course,releaseState,scopeKey))fail(403,'This assignment has not been released.');
+  if(!b.answers||typeof b.answers!=='object'||Array.isArray(b.answers))fail(400,'Answer the questions before submitting.');
+  const answers=Object.fromEntries(a.questions.map(q=>[q.id,clean(Array.isArray(b.answers[q.id])?b.answers[q.id].join('|'):b.answers[q.id],500)]));
+  const prev=db.submissions.find(v=>v.student===u.id&&v.kind==='assignment'&&v.assignment===a.id);
+  if(prev&&!a.resubmission&&!['Needs redo','Returned for correction'].includes(prev.status))fail(409,'You have already submitted this assignment. Your teacher has not allowed another attempt.');
+  const result=gradeAssessment(a.questions,answers),late=lateness(a),immediate=a.autoGrade==='IMMEDIATE';
+  const score=Math.round(result.marks/Math.max(1,result.possibleMarks)*a.max*100)/100;
+  if(prev)db.versions.push({id:randomUUID(),submission:prev.id,snapshot:structuredClone(prev),created:new Date().toISOString()});
+  const sub=prev||{id:randomUUID(),student:u.id,name:u.name,...ctx,kind:'assignment'};
+  Object.assign(sub,{assignment:a.id,online:true,answers,files:[],week:a.week,topic:a.title,max:a.max,late,created:new Date().toISOString(),
+   results:result.results.map(r=>({question:r.question,correct:r.correct})),autoScore:score,
+   status:immediate?'Marked':prev?'Resubmitted':late?'Late':'Submitted',score:immediate?score:null,feedback:immediate?'Marked automatically.':'',autoMarked:immediate,...(immediate?{markedAt:new Date().toISOString()}:{})});
+  if(!prev)db.submissions.push(sub);await save();
+  json({submitted:true,graded:immediate,late,...(immediate?{score,max:a.max,percentage:result.percentage,correct:result.correct,total:result.total,results:result.results.map((r,i)=>({question:r.question,correct:r.correct,...(a.showAnswers?{answer:r.answer,explanation:r.explanation}:{})}))}:{})},201);return true;
  }
  return false;
 }

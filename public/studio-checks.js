@@ -13,6 +13,8 @@ export function publicationIssues(week,targets=null){
   list.forEach((q,index)=>{const target={lessonId,bank,index},prefix=label+' question '+(index+1)+': ';
    for(const [key,text]of [['prompt','write the question.'],['answer','set the correct answer.'],['explanation','add feedback explaining the answer.']])if(!filled(q[key]))add(prefix+text,{...target,path:bank+'.'+key});
    if(q.kind==='choice'&&((q.options||[]).length<2||q.options.some(v=>!filled(v))||!q.options.includes(q.answer)))add(prefix+'provide at least two choices and select an answer from them.',{...target,path:bank+'.options'});
+   if(q.kind==='multi'&&((q.options||[]).length<2||q.options.some(v=>!filled(v))||!(q.answers||[]).length||q.answers.some(v=>!q.options.includes(v))))add(prefix+'provide at least two choices and tick every correct one.',{...target,path:bank+'.answers'});
+   if(['numeric','expression'].includes(q.kind)&&q.tolerance!==undefined&&!(Number(q.tolerance)>=0))add(prefix+'use a tolerance of 0 or more.',{...target,path:bank+'.tolerance'});
    if(q.kind==='boolean'&&filled(q.answer)&&!['true','false'].includes(q.answer.toLowerCase()))add(prefix+'choose True or False.',{...target,path:bank+'.answer'});
   });
  }

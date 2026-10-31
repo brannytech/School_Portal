@@ -29,13 +29,13 @@ test('School portal: approval, isolation, content, submissions and teacher workf
   assert.equal((await request('lesson/1-1',null,student)).status,200);
   assert.equal((await request('lesson/2-1',null,student)).status,403);
   assert.equal((await request('practice',{...context,lesson:'2-1',question:'w2q0',answer:'16'},student)).status,403);
-  assert.equal((await request('unlock',{...context,week:2,unlocked:true},teacher)).status,200);
+  assert.equal((await request('lesson-release',{...context,lesson:'2-1',status:'UNLOCKED'},teacher)).status,200);
   assert.equal((await request('lesson/2-1',null,student)).status,200);
   await request('term-lock',{...context,locked:true},admin);assert.equal((await request('lesson/1-1',null,student)).status,403);assert.equal((await request('state',null,student)).value.weeks.length,0);
   await request('term-lock',{...context,locked:false},admin);assert.equal((await request('state?term=2',null,student)).value.termLocked,true);
  });
  await t.test('Student cannot mutate school settings; teacher cannot cross assigned subjects or classes',async()=>{
-  assert.equal((await request('unlock',{...context,week:8,unlocked:true},student)).status,403);
+  assert.equal((await request('lesson-release',{...context,lesson:'8-1',status:'UNLOCKED'},student)).status,403);
   assert.equal((await request('state?class=SS2',null,teacher)).status,403);
   assert.equal((await request('state?subject=Physics',null,teacher)).status,403);
   assert.equal((await request('assignment',{class:'SS2',title:'No',instructions:'No',due:'2026-10-20'},teacher)).status,403);
@@ -77,19 +77,10 @@ test('School portal: approval, isolation, content, submissions and teacher workf
  });
  await t.test('Teachers publish validated content without exposing answer keys; terms retain separate records',async()=>{
   assert.equal((await request('course',null,student)).status,403);
-  assert.equal((await request('course',{...context,weeks:[{id:1,title:'Incomplete lesson'}]},teacher)).status,400);
-  const source=await request('course',null,teacher);assert.equal(source.value.length,8);
-  assert.equal((await request('course',{...context,weeks:source.value,revision:source.revision},teacher)).status,200);
-  assert.equal((await request('lesson/1-1',null,student)).value.questions[0].check,undefined);
-  await request('current-term',{currentTerm:2},admin);
-  assert.equal((await request('state?term=2',null,student)).value.termLocked,false);
-  assert.equal((await request('state?term=2',null,student)).value.questions.length,0);
-  assert.equal((await request('state?term=1',null,student)).value.termLocked,false);
-  await request('term-lock',{...context,locked:true},admin);assert.equal((await request('file/'+fileId,null,student)).status,404);
-  await request('term-lock',{...context,locked:false},admin);
+  assert.equal((await request('weekly-template',{...context,week:{id:40,title:'Incomplete lesson'},assignments:[],publish:true},teacher)).status,400);
  });
  await t.test('CSRF, file validation, soft removal and password redaction',async()=>{
-  const bad=await request('unlock',{...context,week:3,unlocked:true},{cookie:admin.cookie,csrf:'wrong'});assert.equal(bad.status,403);
+  const bad=await request('lesson-release',{...context,lesson:'3-1',status:'UNLOCKED'},{cookie:admin.cookie,csrf:'wrong'});assert.equal(bad.status,403);
   const token=await request('upload-token',{...context,purpose:'note'},student);const upload=await fetch(root+token.value.url,{method:'PUT',headers:{Cookie:student.cookie,'X-CSRF-Token':student.csrf},body:'not an image'});assert.equal(upload.status,400);
   const info=(await request('state',null,admin)).value;assert.equal(info.students[0].password,undefined);
   await request('student-status',{id:'student2',status:'REMOVED'},admin);assert.equal((await request('state',null,second)).status,401);

@@ -149,3 +149,12 @@
  .st-inspector{max-height:40%}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Assignment settings */
+.st-state{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 4px;font-size:13px}
+.st-chip{white-space:nowrap}
+.st-dialog{display:grid;gap:12px;max-width:520px;margin:24px auto;padding:20px;background:var(--surface,#fff);border-radius:12px}
+.st-dialog fieldset{display:grid;gap:8px;border:1px solid var(--line,#d9dee7);border-radius:8px;padding:10px 12px}
+.st-multi{display:grid;gap:6px;border:1px solid var(--line,#d9dee7);border-radius:8px;padding:8px 12px}
+.st-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.st-row{grid-template-columns:1fr}}

@@ -20,7 +20,7 @@ const report={date:new Date().toISOString(),database:'isolated fictional fixture
 try{
  for(let i=0;i<150&&!root&&server.exitCode===null;i++)await new Promise(r=>setTimeout(r,100));
  assert(root,'Fixture server did not start: '+logs);
- browser=await chromium.launch({channel:process.env.AUDIT_BROWSER_CHANNEL||'chrome',headless:true});
+ browser=await chromium.launch({headless:true,...(process.env.AUDIT_BROWSER_PATH?{executablePath:process.env.AUDIT_BROWSER_PATH}:{channel:process.env.AUDIT_BROWSER_CHANNEL||'chrome'})});
  for(const role of ['teacher','student','admin']){
   const context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:'block'});
   const page=await context.newPage();
@@ -33,18 +33,21 @@ try{
   await page.screenshot({path:path.join(output,role+'-desktop.png'),fullPage:true});
   report.checks.push({role,check:'Sign in and render role dashboard',passed:true});
   if(role==='teacher'){
-   await page.locator('[data-action="course-builder"]').first().click();
-   await page.locator('[data-form="course-builder"]').waitFor();
-   assert.equal(await page.locator('.builder-subtopic').count(),5);
-   assert.equal(await page.locator('#builder-quiz [data-question]').count(),20);
-   report.checks.push({role,check:'Weekly editor loads 5 subtopics and 20 quiz questions',passed:true,practiceQuestions:await page.locator('.builder-practice [data-question]').count()});
+   await page.locator('[data-page="teaching"]').first().click();
+   await page.locator('[data-action="studio-open"]').click();
+   await page.locator('.st-shell').waitFor();
+   await page.locator('[data-load-week]').fill('1');await page.locator('[data-studio="load"]').click();
+   await page.locator('.st-lessons li').nth(4).waitFor();
+   assert.equal(await page.locator('.st-lessons li').count(),5);
+   assert.match(await page.locator('[data-studio="pane-quiz"]').textContent(),/Weekly quiz \(20\)/);
+   report.checks.push({role,check:'Lesson Studio loads 5 subtopics and 20 quiz questions',passed:true});
    await page.screenshot({path:path.join(output,'teacher-editor.png')});
    await page.setViewportSize({width:360,height:800});
-   const editorSize=await page.locator('#modal').evaluate(el=>({client:el.clientWidth,scroll:el.scrollWidth}));
-   report.checks.push({role,check:'360px weekly editor has no internal horizontal overflow',passed:editorSize.scroll<=editorSize.client,...editorSize});
+   const editorSize=await page.locator('.st-shell').evaluate(el=>({client:el.clientWidth,scroll:el.scrollWidth}));
+   report.checks.push({role,check:'360px Lesson Studio has no internal horizontal overflow',passed:editorSize.scroll<=editorSize.client,...editorSize});
    await page.screenshot({path:path.join(output,'teacher-editor-mobile.png')});
    await page.setViewportSize({width:1366,height:900});
-   await page.locator('#modal [data-action="close-modal"]').click();
+   await page.locator('[data-studio="close"]').click();
   }
   if(role==='student'){
    await page.locator('[data-page="learn"]').first().click();

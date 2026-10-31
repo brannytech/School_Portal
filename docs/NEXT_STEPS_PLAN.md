@@ -69,7 +69,10 @@ All six items below are complete: `verify-studio-v2`, `verify-studio-interactive
 
 Acceptance: all browser scripts pass, `npm test` green, screenshots reviewed at 1440, 1024 and 360 px.
 
-### Step B. Stage 5: question authoring v2 (`public/studio/questions.js` + server `question()` in `weekly-content.mjs`)
+### Step B. Stage 5: question authoring v2 — DONE (30 Oct 2026)
+Implemented: `multi` kind (several correct answers, sent as `a|b`), `accepted` alternative answers, tolerance, marks (marks-weighted `gradeAssessment`), hint, difficulty, duplicate / reorder, CSV import (`questionsFromCSV`), formulas in prompts and choices as `$latex$`, student checkbox UI in practice, weekly quiz and assessments. Tests: `tests/question-authoring.test.mjs`, `scripts/verify-questions.mjs`.
+Not done (decided to keep prompts plain text with `$…$` maths instead of a second TipTap editor): images inside question prompts, `promptDoc`, a live formula preview while typing. Add them later if teachers ask; images would need `/api/media` to authorise images used by released questions.
+Original brief, for reference:
 - Question prompt is rich: a small TipTap editor (reuse `createLessonEditor` options or a lighter bundle) supporting inline equations and images. Store as `promptDoc` (rich-text doc) alongside plain `prompt` text for search and old clients; student UI renders `promptDoc` when present.
 - Kinds: single choice (radio), multiple correct answers (checkbox, `answers: []`), numeric with tolerance (`tolerance`, units optional), short answer with several accepted answers, fill in the blank, true/false, expression.
 - Per question: marks, hint, difficulty, explanation (rich), optional image.
@@ -77,13 +80,17 @@ Acceptance: all browser scripts pass, `npm test` green, screenshots reviewed at 
 - Grading: extend `checkAnswer` in `core/domain.ts` (strict TypeScript, then `npm run build`) and keep old questions working. Students never receive answers (see `studentLesson` allow-list in `public/lesson-document.js`; add new safe fields there).
 - Tests: grading unit tests (tolerance, multi-answer partial/none), server validation, student payload leak test, browser test that an equation + image in a prompt renders for the student.
 
-### Step C. Stage 6: assignments written in the Studio
+### Step C. Stage 6: assignments written in the Studio — DONE (31 Oct 2026)
+Implemented as agreed with the owner: scope LESSON / GENERAL / WEEK_END with linked subtopics; new work is LOCKED until the teacher releases it (Studio panel, or "Release to students" on the Assignments page, for use in class); PHOTO mode (notebook + photo, teacher marks) and ONLINE mode (questions marked at once or held for review; score stored on the submission so monitoring counts it); copy to another week/class; assignments are saved separately from the week (`assignment-save/-release/-copy/-delete/-submit`). Tests: `tests/assignments-v2.test.mjs`, `scripts/verify-assignments.mjs`.
+Still to do in Step D: delete the old assignment form/handlers in `public/weekly-course.js` (`course-new-assignment`, `course-edit-assignment`) and the legacy `assignment` POST in `server.mjs`; image-in-assignment media rules are in place but only the copy path is covered by a unit test.
+Original brief:
 - New Studio pane "Assignments" in the outline (per week). Each assignment: title, instructions written in the same continuous editor (stored as `document`), settings panel with due date, maximum marks, release (draft / now / scheduled / locked, reuse the same dialog wording), resubmission allowed, attachments allowed.
 - Server: `assignment-save` and `prepareAssignment` accept `document` (validated with `validateLessonDocument`), keep `instructions` plain-text fallback; students see rendered document; submissions flow unchanged (photo upload).
 - Remove the duplicate assignment form from `public/weekly-course.js`.
 - Tests: save/publish/schedule/lock, student can/cannot open, due-date lateness, image in instructions served by `/api/media`.
 
-### Step D. Stage 7: retire duplicates, docs, final checks, pull request
+### Step D. Stage 7: retire duplicates, docs, final checks, pull request (DONE except final run and PR)
+Done: duplicates retired, clean-install end-to-end test, teacher empty-state hint, docs and Studio guide, cache bumped to v21.
 - Remove the old builder `public/weekly-course.js` authoring UI, `/api/course` POST endpoints, per-week `unlock` endpoint and buttons, and the older release UI in `public/upgrade.js` (`advanced-release`). Keep `term-lock` (admin master switch) and `releaseState` fallback only if existing data needs it (clean installs do not).
 - Admin screens: confirm **Add student / teacher**, **Assign a subject**, CSV import still work on a clean install; add an empty-state hint on the teacher dashboard ("Open Lesson Studio to create Week 1").
 - Update `README.md`, `USER_GUIDE.md`, `DEPLOYMENT.md`, `.env.example`, `docs/` (Studio guide with screenshots).

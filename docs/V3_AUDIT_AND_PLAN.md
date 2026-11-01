@@ -1,6 +1,6 @@
 # Olawale's Lab, Version 3: audit and implementation plan
 
-Status: proposal for review, **updated 1 November 2026 with the owner's decisions** (section 10). Nothing in this document has been implemented yet.
+Status: **approved for planning**, updated 1 November 2026 with the owner's decisions and confirmed defaults (section 10). One item is still open: buying the domain. Nothing in this document has been implemented yet.
 Audited: branch `clean-platform-v2` (PR #4), 1 November 2026.
 Audience: the school owner, teachers, and whoever builds Version 3.
 
@@ -400,13 +400,6 @@ Total core (V3.0 to V3.6 plus hosting, support monitor and parent report): about
 | Question | Note |
 |---|---|
 | Who buys the domain, and when? | Decide **before** students install the app or QR posters are printed (section 11.3). Until then, use the temporary address for staff testing only. |
-
----|---|
-| Who may see **all subjects** for one child (needed for the combined report)? | Admin and a **form teacher** assigned per class. Subject teachers see their own subject only. |
-| Should the report show **class position**? | **No** (shows band and trend only). Can be switched on per school. |
-| Does the school use a **grade scale** (A1 to F9, percentages) and **CA/exam weights** for the "scores so far" line? | Use the existing test and exam scores as entered, shown as marks and percentages, with the four support bands from section 12. |
-| Who **signs** the report (class teacher, head teacher)? | A configurable signature line for class teacher and head teacher. |
-| Who **buys the domain** and when? | Decide **before** parents and students install the app (see section 11.3). |
 
 ---
 

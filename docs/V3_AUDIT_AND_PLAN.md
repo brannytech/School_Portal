@@ -363,6 +363,7 @@ Estimates are working days for one developer and include tests.
 
 | Phase | Goal | Contents | Days | Done when |
 |---|---|---|---:|---|
+| **V3.0t Multi-school (SaaS)** | One platform, many schools | Section 16: per-school isolated data, school code at sign-in, school branding, platform-owner role, per-school storage, tenant tests | 12 | School A cannot read or change anything of school B, proved by automated tests; a new school can be created in minutes |
 | **V3.0 Quick wins** | Cut data use now | Crest and photo conversion; brotli/gzip; ETag/304; cache headers; fix theme colour; PNG and Apple icons; remove crest from pre-cache | 2 | 12-screen student session under 1 MB |
 | **V3.1 Build step and PWA shell** | Installable, fast on repeat | esbuild bundle (role-split, hashed, pre-compressed); new service worker; complete manifest; install and update prompts; offline banner | 5 | Lighthouse PWA checks pass; repeat visit under 20 KB |
 | **V3.0h Hosting** | Run it somewhere safe | Section 11: long-running host, managed Postgres, object storage, HTTPS, backups, health check | 2 | Staging site live; backup and restore rehearsed |
@@ -395,6 +396,10 @@ Total core (V3.0 to V3.6 plus hosting, support monitor, parent report, lesson im
 3. **No parent logins.** Staff download a parent report for a chosen period (section 13) and the Monitor is rebuilt around measurable support (section 12).
 4. First host: **vercel.app** (or another supported host), later a **purchased domain** (see the warnings in section 11).
 
+### Direction set by the owner (1 November 2026, later)
+9. **The final goal is SaaS for education:** many schools on one platform, each with fully independent data (school A never sees school B), each customisable (logo, name, colours, building photo) on one common architecture. Section 16 is the plan, and it comes **before** the other V3 phases because every later feature (support monitor, parent report, import) must be built tenant-aware.
+10. **Domain purchase is postponed.** The app is reached at one address; the school is chosen at sign-in with a school code. Per-school subdomains can come later without code changes.
+
 ### Confirmed by the owner (1 November 2026)
 5. **All-subject view:** admin and a form teacher assigned per class. Subject teachers see their own subject only.
 6. **Class position:** not shown on the report (can be switched on later per school).
@@ -404,7 +409,7 @@ Total core (V3.0 to V3.6 plus hosting, support monitor, parent report, lesson im
 ### Still open
 | Question | Note |
 |---|---|
-| Who buys the domain, and when? | Decide **before** students install the app or QR posters are printed (section 11.3). Until then, use the temporary address for staff testing only. |
+| Domain | Postponed (decision 10). One address for all schools for now. Only needed before QR posters are printed, because the installed app is tied to the address. |
 
 ---
 
@@ -678,6 +683,54 @@ Teachers already have lectures in Word, slides or PDF. Retyping 13 weeks for eac
 - A listening lesson plays on a phone, works offline once downloaded, and shows a transcript.
 - An essay is typed, submitted, rubric-marked and appears in the Monitor and the report.
 - Tests cover the new question type, rubric totals, privacy of audio, and late and resubmission rules.
+
+---
+
+## 16. Multi-school platform (SaaS)
+
+### 16.1 Goal and rules
+Many schools use the same running application. Rules that never bend:
+1. **Isolation:** a person signed in to school A can never read, change, count or even detect data of school B (users, lessons, scores, files, images, sessions, audit log).
+2. **One code base:** schools differ only by settings (name, motto, logo, building photo, colours, report header, class and subject lists), never by code.
+3. **No cross-school accounts:** the same email may exist in two schools as two separate accounts.
+4. **Provisioning is quick:** the platform owner creates a school and its first admin in minutes; the admin then follows the existing forced first-login password change and adds teachers and students.
+
+### 16.2 Where the app stands today (audit)
+- The database already has a `schools` table and `school_id` on users, but the application keeps **one** school in memory (`db.school`) and one database file; every module imports that single `db`.
+- Uploads are stored under one folder (or one S3 prefix) keyed only by file id.
+- Sessions, rate limits and upload links are global.
+
+### 16.3 Chosen design: one isolated database per school, resolved per request
+Isolation by **separate data**, not only by a `school_id` filter. A forgotten filter would then leak at worst nothing, because the other school's data is not even loaded.
+
+| Concern | Design |
+|---|---|
+| Data | Each school has its own database (SQLite file now; its own Postgres schema later) and its own uploads folder (S3 prefix `schools/<id>/`). |
+| Finding the school | School code (slug) typed at sign-in, or the sub-domain later. The sign-in cookie carries the school code, so every request is routed to that school before any data is touched. |
+| Code impact | The shared `db`, `sql` and data folder become tenant-aware views that always point at the school of the current request. Requests are already handled one at a time, so the switch is safe. Existing modules keep working unchanged. |
+| Existing install | The current single database becomes the first school automatically; nothing is lost and the school code field is hidden while only one school exists. |
+| Sessions and limits | Session records live in each school's own database; login rate limits and upload links are keyed by school. |
+| Secrets | Each school has its own signing secret. |
+| Provisioning | `npm run create-school` now; a platform-owner screen in step 2. |
+
+Trade-offs accepted: memory use grows with the number of active schools (each school's data is held in memory, as today), which is fine for dozens of small and medium schools. Section V3.5 (indexed, incremental data layer) removes this limit before the platform grows beyond that. Reporting across schools is deliberately not possible.
+
+### 16.4 Steps
+| Step | Work | Done when |
+|---|---|---|
+| **1. Tenant isolation (done)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
+| **2. School identity and platform owner** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
+| **3. Hosting** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
+| **4. Shared curriculum library** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
+| **5. Later** | Sub-domain per school, custom domain per school, plans and billing, school self-sign-up | Per feature |
+
+### 16.5 Test plan for isolation
+- Two schools with the same email address: each signs in only to its own school.
+- A cookie from school A sent with school B's code is refused.
+- Lesson, file, image and submission ids from school A requested in school B return "not found".
+- Lists (users, classes, scores, monitoring) in school B never contain school A rows.
+- Creating or deleting a school's data leaves the other school's database file unchanged.
+- Uploaded files are stored and read only below the owning school's folder; path tricks (`..`, absolute paths) in a school code are rejected.
 
 ---
 

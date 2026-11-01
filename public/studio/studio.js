@@ -547,7 +547,14 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
  }
  async function onChange(event){
   const el=event.target;
-  if(el.matches('[data-publish-lesson]')&&s.publish){el.checked?s.publish.selected.add(el.value):s.publish.selected.delete(el.value);renderPublish();}
+  if(el.matches('[data-csv-file]')){
+   const file=el.files?.[0],prefix=el.dataset.csvFile,report=q(`[data-csv-report="${prefix}"]`);if(!file)return;
+   if(/\.xlsx?$/i.test(file.name)){if(report)report.textContent='Excel files cannot be read directly. In Excel choose File, Save As, CSV, or copy the cells and paste them in the box.';el.value='';return;}
+   if(file.size>1024*1024){if(report)report.textContent='That file is too large (limit 1 MB).';el.value='';return;}
+   const buffer=await file.arrayBuffer();let text=new TextDecoder('utf-8',{fatal:false}).decode(buffer);if(text.includes('\ufffd'))text=new TextDecoder('windows-1252').decode(buffer);
+   const box=q(`[data-csv="${prefix}"]`);if(box)box.value=text;el.value='';importQuestions(prefix);return;
+  }
+  else if(el.matches('[data-publish-lesson]')&&s.publish){el.checked?s.publish.selected.add(el.value):s.publish.selected.delete(el.value);renderPublish();}
   else if(el.matches('[data-publish-mode]')&&s.publish){s.publish.mode=el.value;renderPublish();}
   else if(el.matches('[data-preview-width]'))q('.studio-preview').style.width=el.value;
   else if(el.dataset.bank){s[indexField(el.dataset.bank)]=Number(el.value);refreshQuestions();}

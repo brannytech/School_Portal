@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {db, save, dataDir} from './store.mjs';
+import {db, save, tenantDir, storagePrefix} from './store.mjs';
 import {cleanImage} from './images.mjs';
 import {canViewStudent,canEditStudentPhoto,hasStudentPrivilege,assignedClasses} from './student-access.mjs';
 import {storeFile, streamFile} from './storage.mjs';
@@ -12,7 +12,7 @@ export async function profileApi({endpoint, method, url, req, res, u, body, json
   if(!target || (target.id!==u.id && u.role!=='ADMIN' && !(canViewStudent(u,target)&&(hasStudentPrivilege(u,'registerStudents')||hasStudentPrivilege(u,'manageStudents'))))) fail(404,'Profile photo not found.');
   const photo=(db.profilePhotos||[]).find(p=>p.id===target.photoId && p.owner===target.id);
   if(!photo) fail(404,'Profile photo not found.');
-  await streamFile(dataDir,photo,req,res);
+  await streamFile(tenantDir(),photo,req,res,'no-store',storagePrefix());
   return true;
  }
  if(endpoint!=='profile-photo' || method!=='PUT') return false;
@@ -24,7 +24,7 @@ export async function profileApi({endpoint, method, url, req, res, u, body, json
  if(!staged && u.role==='STUDENT' && !target.photoId) fail(403,'Ask your administrator to add your initial profile photo first.');
  const cleaned=cleanImage(await body(req,700*1024));
  const photo={id:randomUUID(),owner:target?.id||null,uploader:u.id,type:cleaned.type,size:cleaned.bytes.length,created:new Date().toISOString()};
- photo.storage=await storeFile(dataDir,photo.id,cleaned.bytes,photo.type);
+ photo.storage=await storeFile(tenantDir(),photo.id,cleaned.bytes,photo.type,storagePrefix());
  db.profilePhotos??=[];
  db.profilePhotos.push(photo);
  if(target) {target.photoId=photo.id;audit(u,`Updated profile photo for ${target.name}`);}

@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 
-export async function openDatabase(directory){
+export async function openDatabase(directory,{schema}={}){
  let sql;
  if(process.env.DATABASE_URL?.startsWith('postgres')){
   const {Client}=await import('pg');const client=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:true}:undefined});await client.connect();
+  if(schema){if(!/^[a-z0-9][a-z0-9-]{1,30}$/.test(schema))throw Error('Invalid school schema name.');await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);await client.query(`SET search_path TO "${schema}"`);}
   const query=(s,p=[])=>client.query(s.replace(/\?/g,()=>`$${++query.index}`),p);query.index=0;
   sql={kind:'postgresql',async all(s,p=[]){let i=0;return(await client.query(s.replace(/\?/g,()=>`$${++i}`),p)).rows;},async run(s,p=[]){let i=0;return client.query(s.replace(/\?/g,()=>`$${++i}`),p);},async exec(s){return client.query(s);},async close(){await client.end();}};
  }else{

@@ -718,11 +718,26 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 ### 16.4 Steps
 | Step | Work | Done when |
 |---|---|---|
-| **1. Tenant isolation (done)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
+| **1. Tenant isolation (done, branch `multi-school`)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
 | **2. School identity and platform owner** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
 | **3. Hosting** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
 | **4. Shared curriculum library** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
 | **5. Later** | Sub-domain per school, custom domain per school, plans and billing, school self-sign-up | Per feature |
+
+### 16.4a What step 1 delivered
+- `store.mjs`: school registry (`schools.json`), one database and uploads folder per school, shared `db`, `sql` and `save` now always point at the school of the current request. The first school keeps using the data folder, so an existing install upgrades in place (its school code is `main`, or `SCHOOL_CODE`).
+- `server.mjs`: each request is routed to its school before any data is read. Sign-in, register and recovery name the school (`school` code); every other request follows the school written into the session cookie (`lab_session=<code>.<token>`). Wrong or swapped codes fail closed.
+- Per-school signing secret, upload links, sessions and S3 key prefix (`schools/<code>/private/`).
+- Sign-in page shows a "School code" field only when more than one school exists; the code is remembered on the device.
+- `npm run create-school -- --code greenfield --name "Greenfield College" --admin-email head@example.com` creates a school and prints a temporary password (run with the app stopped, then restart).
+- `tests/multi-school.test.mjs`: same email in two schools, wrong or missing codes, cookie swapping, cross-school ids, separate database files, rejected path-trick codes, reused codes. Whole suite: 109 tests pass.
+- Postgres: each school gets its own schema (`SET search_path`). **Not yet exercised against a live Postgres**; do that in step 3.
+
+### 16.4b Known limits after step 1 (closed by later steps)
+- The school name, crest and building photo on the sign-in page are still Grace-Field's (step 2).
+- A new school needs the command line and a restart; the platform-owner screen replaces this (step 2).
+- All schools' data is held in memory in one process (acceptable for dozens of schools; V3.5 removes the limit).
+- Production start still requires `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the first school.
 
 ### 16.5 Test plan for isolation
 - Two schools with the same email address: each signs in only to its own school.
@@ -731,6 +746,33 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 - Lists (users, classes, scores, monitoring) in school B never contain school A rows.
 - Creating or deleting a school's data leaves the other school's database file unchanged.
 - Uploaded files are stored and read only below the owning school's folder; path tricks (`..`, absolute paths) in a school code are rejected.
+
+### 16.6 Step 2 in detail: school identity and platform owner (next)
+
+**A. Per-school settings** (stored in each school's own database, editable by that school's admin)
+| Setting | Used on |
+|---|---|
+| School name, short name, motto | Sign-in page, header, reports, page title |
+| Crest (logo) and building photo | Sign-in page, header, parent report. Uploaded once, converted to small WebP/PNG (see section 2) and stored in the school's own folder. Served from a public, cacheable, school-scoped URL because they appear before sign-in. |
+| Accent colour | Buttons and links (validated for contrast; falls back to the default if it fails 4.5:1) |
+| Class list and subject list | Already per school; add sensible starter sets (JSS1 to SS3) at creation |
+| Report header lines (address, phone, principal name) | Parent report (section 13) |
+Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the manifest, the service-worker pre-cache list and the print styles with values from the school settings. New schools start with neutral branding (initials badge instead of a crest) until a logo is uploaded.
+
+**B. Branding before sign-in:** after the school code is typed, the page fetches `/api/config?school=<code>` and swaps in that school's name, crest and colour. The last used code is remembered, so returning students see their own school immediately.
+
+**C. Platform owner**
+- New role `OWNER`, stored in a small platform database (`platform.sqlite`), **never** inside a school's database, so no school admin can create or become an owner.
+- Separate sign-in at `/platform` (not linked from any school page), forced password change, rate limited, optional second factor later.
+- Screen: list of schools (name, code, status, students, teachers, last activity, storage used); create school (name, code, admin email, temporary password shown once); suspend and reopen; reset a school admin's password; delete (typed confirmation, exports a backup first).
+- The owner sees school counts and health only, **never** student records. Support access to a school is a deliberate, audited "enter as admin" action that the school can see in its audit log.
+- Creating a school happens inside the running server (no restart, no stale-write risk), replacing the command line.
+
+**D. Tests**: branding of school A never appears for school B; invalid colours and oversized or non-image logos are rejected; a school admin cannot reach `/platform`; suspended schools cannot sign in and their sessions stop working; owner actions are audited; the owner API never returns student data.
+
+**E. Done when:** the owner creates two schools from the screen, each shows its own name, crest and colour on the sign-in page and in the app, and the isolation tests from 16.5 still pass.
+
+**Estimate:** 5 working days.
 
 ---
 

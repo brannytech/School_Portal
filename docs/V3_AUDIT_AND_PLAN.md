@@ -351,6 +351,9 @@ Problems found:
 | 10 | Photo marking tools (zoom, simple pen markup, comment on a spot) | Notebook marking is the core photo workflow | L |
 | 11 | ~~Parent or guardian accounts~~ **Not wanted.** Replaced by the downloadable parent report (section 13) | Owner decision | n/a |
 | 12 | Plain-language wording check for the English labels | Reading ease | S |
+| 13 | **Lesson import** from Word, slides, text and spreadsheets (section 14) | Teachers already have prepared lectures; typing 13 weeks per subject by hand is not realistic | L |
+| 14 | **Audio blocks and listening questions** (section 15) | English and language subjects need listening | M |
+| 15 | **Written (long) answers with rubric marking** (section 15) | Essays and compositions cannot be auto-marked | M |
 
 ---
 
@@ -366,13 +369,15 @@ Estimates are working days for one developer and include tests.
 | **V3.2 Navigation and layout** | Easy to use | Role-specific tabs; context chip; notification bell; consistent names; lesson steps with progress; teacher "Needs attention" and Marking queue; admin review-before-approve | 8 | Walkthrough tests pass at 390 px for all roles |
 | **V3.2m Support monitor** | Know who needs help and why | Section 12: evidence model, support flags, class board, student profile, support plans | 16 | Flagged list agrees with teachers' own list on 80% or more of a pilot class |
 | **V3.2r Parent report** | Reports for parents | Section 13: report builder, editable comments, print and PDF, class bulk run, audit | 8 | A full class of reports generated, reviewed and downloaded in under 10 minutes |
+| **V3.2i Lesson import** | Bring existing lectures in | Section 14: Word first, then text, spreadsheets, slides, PDF text; review screen; folder batch; export | 10 | A teacher's real Word lecture imports into drafts with 90% or more of headings, paragraphs, lists, tables and images kept |
+| **V3.2a Audio and written answers** | Fit English and language subjects | Section 15: audio blocks, listening questions, essay answers, rubric marking | 11 | A listening lesson plays offline; an essay is submitted, rubric-marked and counted in the Monitor |
 | **V3.3 Offline and data saver** | Works with little data | Download-week; stale-while-revalidate lessons; outbox with idempotent retries; data-saver switch; smaller `state` calls | 8 | Student can read and answer a downloaded week in airplane mode; no answer lost |
 | **V3.4 Architecture** | Safe to grow | Router table with schema validation; split `app.js` into screen modules; remove monkey-patching; CI with budgets; repository tidy; Node pinning | 10 | CI green; no file over 400 lines; budgets enforced |
 | **V3.5 Data layer** | School-wide scale | Incremental persistence; indexed columns for monitoring and marking; load test with 1,000 students | 6 | Save time independent of database size; monitoring page under 300 ms |
 | **V3.6 Accessibility and polish** | Inclusive | Manual TalkBack and VoiceOver passes; dark-mode and zoom checks; live announcements; 44 px targets; text size floor | 5 | Written test report; zero known blockers |
 | **V3.7 Optional extras** | Re-engagement | Web Push; calendar; CSV export; weak-area suggestions; Play Store listing via TWA | 8 | Per feature |
 
-Total core (V3.0 to V3.6 plus hosting, support monitor and parent report): about **70 working days**. V3.0, V3.0h and V3.1 (9 days) deliver a small, fast, installable app on real hosting. The support monitor and parent report (24 days) are what teachers and parents will notice most.
+Total core (V3.0 to V3.6 plus hosting, support monitor, parent report, lesson import, audio and written answers): about **90 working days**. V3.0, V3.0h and V3.1 (9 days) deliver a small, fast, installable app on real hosting. The support monitor and parent report (24 days) are what teachers and parents will notice most.
 
 ### Quality gates for every phase
 - `npm run build`, `npm test`, `npm run verify-math`, and all browser scripts pass.
@@ -605,6 +610,74 @@ Sample layout (not final design):
 - Numbers in the report match the Monitor for the same child and period (automated test).
 - Every comment sentence maps to a stored measure (automated test).
 - The PDF opens correctly on Android, iPhone and desktop, prints cleanly on A4, and stays under 200 KB.
+
+---
+
+## 14. Lesson import (teachers bring their existing lectures)
+
+### 14.1 Why
+Teachers already have lectures in Word, slides or PDF. Retyping 13 weeks for each subject would stop adoption. Import must be a first-class feature of the Lesson Studio, not an afterthought.
+
+### 14.2 What can be imported
+
+| Source | Priority | What is kept | Notes |
+|---|---|---|---|
+| **Word (.docx)** | 1 (build first) | Headings, paragraphs, bold/italic/underline, bullet and numbered lists, tables, images, links, simple equations | Most teachers have this. Google Docs and WPS export to .docx. |
+| **Text and Markdown (.txt, .md)** | 1 | Headings and lists | Cheapest path; also used by tests. |
+| **Spreadsheet or CSV of questions** | 1 | Practice, quiz and assignment questions (the CSV import already exists; add .xlsx) | A downloadable template with example rows. |
+| **Studio export (.json)** | 1 | Everything | Lets teachers share a week or back it up (see 14.6). |
+| **PowerPoint (.pptx)** | 2 | Slide titles, text, images, speaker notes | One slide group becomes one subtopic; slides become sections. |
+| **PDF** | 3 | Text and images of **text-based** PDFs only | Scanned PDFs cannot be read; the importer says so and suggests photographing pages as an image block. |
+
+### 14.3 Flow (the teacher's view)
+1. In the Studio choose **Import**, then drop one file or a whole folder.
+2. Choose the **class, subject, term and week** once. For a folder, weeks are read from file names ("Week 3 Fractions.docx"), and the teacher can correct them.
+3. Choose how to split a file into subtopics: by **Heading 1**, by **Heading 2**, or **keep as one**.
+4. A **review screen** shows what was found: each subtopic with a preview, plus a list of items needing attention (images without alt text, equations to check, tables that were simplified, unsupported items that were skipped).
+5. The teacher accepts, edits or skips each subtopic. Everything arrives as a **draft**. **Nothing is published automatically.**
+6. An **Undo import** button removes the whole batch.
+
+### 14.4 How content is converted
+- Word and slide content is converted **in the browser**, so private lectures are not sent anywhere until the teacher saves. The conversion libraries load only when the Import window opens, so students never download them.
+- Output is the Studio's own document blocks, then checked by the same `validateLessonDocument` rules as typed content.
+- **Images** are pulled out, compressed on the phone or laptop, uploaded as private lesson images, and flagged until **alt text** is added (the Studio already requires it).
+- **Equations:** Word equations are converted to LaTeX where possible and shown for checking; anything that cannot be converted becomes a flagged image or plain text, never silently dropped.
+- **Questions:** sections titled "Practice", "Quiz" or "Assignment" with numbered questions and an answer key are detected and offered as questions; anything uncertain is left in the lesson text and listed for review.
+- **Safety:** size limit (for example 20 MB per file), macros ignored, HTML cleaned, links checked, rate limited, and nothing executed.
+
+### 14.5 Acceptance
+- A teacher's real lecture imports with at least 90% of headings, paragraphs, lists, tables and images preserved, in under a minute.
+- A folder of 13 weekly files becomes 13 draft weeks in under 10 minutes including review.
+- Automated tests with sample .docx, .pptx, .md and .csv fixtures, including a deliberately broken file.
+- Import adds under 150 KB to the Studio (lazy-loaded) and nothing to the student app.
+
+### 14.6 Export (the other direction)
+- **Export a week or subtopic** as .docx and as .json: a backup, a way to share between teachers or classes, and a way to leave the platform with your own content.
+
+---
+
+## 15. Audio and written answers (English and language subjects)
+
+### 15.1 Audio blocks and listening questions
+- **New Studio block "Audio":** upload MP3, M4A or OGG, or **record in the browser**. Recorded speech is stored at a low bitrate so a one-minute clip is about 100 to 200 KB.
+- **Transcript required** (accessibility, and for students who cannot play audio).
+- **Student side:** a simple player with speed control. Audio is **never preloaded** in data-saver mode and shows its size ("Play, 180 KB"). It joins "Download this week for offline".
+- **Listening questions:** a question can carry an audio clip (like the picture feature), with an optional play limit.
+- **Privacy:** audio is private, released with its lesson, and served only to the right class, the same rules as lesson images.
+- **Later:** students record a spoken answer (up to 2 minutes) for the teacher to mark.
+
+### 15.2 Written (long) answers with rubric marking
+- **New question type "Written answer":** typed paragraph answer with an optional word range, saved as a draft as the student types (and queued offline).
+- **Marked by the teacher with a rubric:** criteria (for example content, organisation, expression, accuracy), levels, and marks per level. A rubric can be saved and reused.
+- Marking happens in the **Marking queue** (V3.2): side-by-side answer and rubric, reusable comment bank, next student.
+- **Auto help, not auto grade:** word count, and optional "expected ideas" listed for the teacher; nothing scores the essay automatically.
+- Marked essays feed the **understanding score** and **parent report** with their rubric levels, so weaknesses show as "organisation of ideas" rather than just a number.
+- **Photo submission stays** for handwritten work, with the same rubric.
+
+### 15.3 Acceptance
+- A listening lesson plays on a phone, works offline once downloaded, and shows a transcript.
+- An essay is typed, submitted, rubric-marked and appears in the Monitor and the report.
+- Tests cover the new question type, rubric totals, privacy of audio, and late and resubmission rules.
 
 ---
 

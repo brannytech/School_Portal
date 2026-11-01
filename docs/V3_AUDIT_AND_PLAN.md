@@ -390,9 +390,18 @@ Total core (V3.0 to V3.6 plus hosting, support monitor and parent report): about
 3. **No parent logins.** Staff download a parent report for a chosen period (section 13) and the Monitor is rebuilt around measurable support (section 12).
 4. First host: **vercel.app** (or another supported host), later a **purchased domain** (see the warnings in section 11).
 
-### Still open (defaults assumed so work is not blocked)
-| Question | Default if you do not answer |
+### Confirmed by the owner (1 November 2026)
+5. **All-subject view:** admin and a form teacher assigned per class. Subject teachers see their own subject only.
+6. **Class position:** not shown on the report (can be switched on later per school).
+7. **Marks:** show test and exam marks as entered, with the four support bands. No separate grade scale or CA weighting yet.
+8. **Signatures:** class teacher and head teacher lines.
+
+### Still open
+| Question | Note |
 |---|---|
+| Who buys the domain, and when? | Decide **before** students install the app or QR posters are printed (section 11.3). Until then, use the temporary address for staff testing only. |
+
+---|---|
 | Who may see **all subjects** for one child (needed for the combined report)? | Admin and a **form teacher** assigned per class. Subject teachers see their own subject only. |
 | Should the report show **class position**? | **No** (shows band and trend only). Can be switched on per school. |
 | Does the school use a **grade scale** (A1 to F9, percentages) and **CA/exam weights** for the "scores so far" line? | Use the existing test and exam scores as entered, shown as marks and percentages, with the four support bands from section 12. |

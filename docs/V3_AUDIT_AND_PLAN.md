@@ -372,6 +372,7 @@ Estimates are working days for one developer and include tests.
 | **V3.2r Parent report** | Reports for parents | Section 13: report builder, editable comments, print and PDF, class bulk run, audit | 8 | A full class of reports generated, reviewed and downloaded in under 10 minutes |
 | **V3.2i Lesson import** | Bring existing lectures in | Section 14: Word first, then text, spreadsheets, slides, PDF text; review screen; folder batch; export | 10 | A teacher's real Word lecture imports into drafts with 90% or more of headings, paragraphs, lists, tables and images kept |
 | **V3.2a Audio and written answers** | Fit English and language subjects | Section 15: audio blocks, listening questions, essay answers, rubric marking | 11 | A listening lesson plays offline; an essay is submitted, rubric-marked and counted in the Monitor |
+| **V3.3e Learning events** | Show how students work, cheaply | Section 17.3 and 17.4: a few batched event types (worked example opened, tries, active seconds), resume position, distractor tags feeding the misconception view | 5 | Monitor shows evidence per flag; extra data per student per day under 20 KB |
 | **V3.3 Offline and data saver** | Works with little data | Download-week; stale-while-revalidate lessons; outbox with idempotent retries; data-saver switch; smaller `state` calls | 8 | Student can read and answer a downloaded week in airplane mode; no answer lost |
 | **V3.4 Architecture** | Safe to grow | Router table with schema validation; split `app.js` into screen modules; remove monkey-patching; CI with budgets; repository tidy; Node pinning | 10 | CI green; no file over 400 lines; budgets enforced |
 | **V3.5 Data layer** | School-wide scale | Incremental persistence; indexed columns for monitoring and marking; load test with 1,000 students | 6 | Save time independent of database size; monitoring page under 300 ms |
@@ -773,6 +774,79 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 **E. Done when:** the owner creates two schools from the screen, each shows its own name, crest and colour on the sign-in page and in the app, and the isolation tests from 16.5 still pass.
 
 **Estimate:** 5 working days.
+
+### 16.7 How 100 schools get onto the platform (no command line)
+The command in step 1 is a temporary tool. Onboarding happens in two stages.
+
+1. **Platform-owner screen (step 2).** The owner creates a school in a few clicks: name, school code, head's email. The school's head receives an invitation link (or a temporary password shown once), sets their own password at first sign-in, and from then on **the school administers itself**: its head adds teachers and students, edits branding, exports its own data. The owner takes no part in day-to-day running.
+2. **Self-sign-up (step 5).** A school fills in a registration form and verifies its email. The owner approves it (or payment approves it automatically once billing exists). The school is created and its head becomes the administrator.
+
+**Keeping a school's data private from outsiders**
+- The owner role is separate from every school's admin role and lives in its own platform database, outside every school's database.
+- The owner screen shows counts and health only (students, last activity, storage). It never shows names, scores, submissions, photos or reports.
+- A school admin sees only their own school. Other schools cannot reach it (see the tests in 16.5).
+- Support access is a deliberate "enter as admin" action that the school must allow, and it is written to the school's own audit log where the school's admin can read it.
+- Each school can export all of its own data and leave with it.
+- Honest limit: the person who hosts the platform controls the servers, as with any SaaS product. This is handled by encryption at rest, access logging, a data-processing agreement in the contract with each school, and review against the Nigeria Data Protection Act (the platform processes children's data). Legal review is the owner's task, not a coding task.
+
+### 16.8 Is it safe to build step 2 and stop half way?
+Yes. Work is done on separate branches and merged only when its tests pass; the version a school uses today is the last merged one.
+- Step 1 is on its own branch and pull request (#6, stacked on #4). Nothing in it changes behaviour for a single school: the sign-in page looks the same until a second school exists, and an existing install upgrades in place (its school code is `main`).
+- Step 2 will live on its own branch. If it stops half way, the branch is simply not merged; the last merged version keeps working.
+- Every step must pass the whole suite (109 tests at step 1) and the single-school browser scripts before it is merged. A change that only helps when two schools exist must be invisible when there is one.
+
+### 16.9 One school first, or several schools now? (recommendation)
+**Do both, in this order, without a long pause between them:**
+1. **Finish the multi-school foundation (steps 2 and 3) now.** It is the part that is expensive to retrofit: every later feature (support monitor, parent report, lesson import, audio) touches data, files and sign-in. Built on the single-school code first, each would have to be reworked. Step 1 is already done and cost one day because it was done early.
+2. **Then perfect the product with one real pilot school** (the owner's own school) on the multi-school platform: Week 1 to 13 content, quick wins (V3.0), the support monitor, the parent report, and the remaining adjustments the owner has noted. The pilot is simply the first school.
+3. **Sell to other schools only after the pilot term has run**, so lessons learned in the pilot are fixed before other schools see them.
+Remaining adjustments the owner mentions should be listed in section 10 as they arrive, and slotted ahead of step 3 if they block the pilot.
+
+---
+
+## 17. Review of the external proposal "Indices, Studio and Monitoring redesign" (Antigravity, November 2026)
+
+### 17.1 What the document is
+A hands-on test of one week of Mathematics (Indices, Week 2): authoring in the Studio, studying as a student, and reading the teacher monitor, followed by a three-pillar redesign (Studio 3.0, a real-time telemetry pipeline, a diagnostic mastery matrix) and a four-sprint schedule. It was written against the demo data (`student@olawaleslab.school`). Its screenshots are stored on the author's own computer and are not in the repository.
+
+### 17.2 Claims checked against the current code
+| Claim | Finding |
+|---|---|
+| A1. Strict revision check (HTTP 409) locks teachers out | **True, and intended.** The check stops two windows or two teachers overwriting each other. What is missing is a friendlier recovery (reload with the teacher's unsaved changes kept and a compare view). Keep the check; improve the message and recovery. |
+| A2. A new assignment with a client-made id is refused | **Not a defect.** New work is created without an id; the server refuses ids it does not know so one teacher cannot attach work to another week. Our assignment tests cover this. |
+| A3. Publishing destroys the draft (`delete db.weekDrafts[key]`) | **Not present.** No such deletion exists. Drafts are kept when changes are pending, every publish writes a version to history, and restore creates a new draft. The proposed append-only ledger already exists in practice (`weekVersions`). |
+| A4. Formulas need the Inspector and typing raw LaTeX | **Out of date.** The Studio has a visual MathLive equation editor with a live preview and a LaTeX tab. A floating bubble over the cursor is a reasonable polish item. |
+| A5. Drawers clutter small screens | **Already addressed** by the small-window work (collapsible drawers, menus that fit), confirmed by the owner. |
+| B1. Interactive widgets emit no events | **True.** Only "mark as read", answers and presence are recorded. |
+| B2. Math tools are hard-coded | **True, partly.** Interactives are templates (graphs, calculators). A symbolic solver is a large separate project; not recommended now. |
+| B3. No resume or scroll position | **True.** Cheap to add (remember last lesson and scroll). |
+| C1. Five coarse counts, no concept mastery | **True** and already the main finding of section 12 (evidence model, per-topic mastery, support bands). |
+| C2. Presence is a passive heartbeat | **True.** Section 12 already proposes counting only visible, interacting time. |
+| C3. No quick actions from the monitor | **True.** Section 12 has support plans; one-click actions are a good addition. |
+
+### 17.3 What to use, merge, change and discard
+| Idea | Verdict | Where it goes |
+|---|---|---|
+| Per-topic mastery matrix with risk level | **Merge** | Section 12 (class board and student profile). Use our four support bands and measurable rules, not a single "risk" label. |
+| Misconception heat map from wrong answers | **Adopt, simplified** | Section 12. Tag distractors and common wrong answers per question in the Studio (teacher-authored, e.g. "added the powers instead of multiplying"); the monitor counts how often each tag is chosen. No guessing by software. |
+| Interaction events from widgets and worked examples (opened a worked example before trying, number of trials in a graph) | **Adopt, in a small form** | New V3.3 item "Learning events": a few event types, counts and active seconds per lesson, batched. |
+| Active versus passive presence | **Adopt** | Section 12 (count time only while the tab is visible and the student interacts). |
+| One-click actions: extension, reminder, remediation set | **Adopt extension and reminder; defer the rest** | Section 12 support plans. Remediation worksheets need the question bank (V3.2i/V3.2a). Peer-tutoring scheduling: defer. |
+| Resume where I stopped, scroll progress | **Adopt** | V3.2 navigation. |
+| Friendlier 409 handling in the Studio | **Adopt** | Studio polish: keep unsaved edits, show "someone changed this", offer reload or compare. |
+| Floating math bubble and `/` palette | **Partly have it** | `/` menu exists; a bubble over a formula is an optional polish item. |
+| WebSocket or server-sent events for telemetry | **Discard** | Costs battery and data for students with little data, and holds a connection per student on a single-process server. Use small batched POSTs when the lesson is left (`sendBeacon`) or every few minutes, queued offline. |
+| Fine-grained payloads (every parameter value, dwell time per slider move) | **Discard** | Heavy, privacy-unfriendly for children, and not needed for decisions. Counts and active seconds are enough. |
+| "Cognitive Mastery Analyzer" (machine analysis) | **Discard** | Not measurable or explainable to a teacher. Use transparent rules (section 12.3) that a teacher can read and challenge. |
+| Rewrite of draft storage as a new revision ledger | **Discard** | Already exists. |
+| Four sprints of 20 days | **Replace** | Fits our phases: stability items are mostly done; monitor and events sit in V3.2m and V3.3. |
+
+### 17.4 Rules for any telemetry we add
+1. **Data-light:** batched, compressed, at most one request a minute, queued offline, dropped silently on failure.
+2. **Child-safe:** record learning actions only (opened, tried, correct, active seconds), never keystrokes, text typed, location or device identifiers.
+3. **School-scoped:** stored in the school's own database like everything else (section 16).
+4. **Explainable:** every flag shown to a teacher lists the evidence behind it.
+5. **Retention:** raw events kept for the term, then summarised and deleted.
 
 ---
 

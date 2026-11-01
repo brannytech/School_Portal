@@ -1,6 +1,6 @@
 # Olawale's Lab, Version 3: audit and implementation plan
 
-Status: proposal for review. Nothing in this document has been implemented yet.
+Status: proposal for review, **updated 1 November 2026 with the owner's decisions** (section 10). Nothing in this document has been implemented yet.
 Audited: branch `clean-platform-v2` (PR #4), 1 November 2026.
 Audience: the school owner, teachers, and whoever builds Version 3.
 
@@ -26,6 +26,16 @@ Audience: the school owner, teachers, and whoever builds Version 3.
 | 8 | There is **no offline reading** and no way to download a week for later. Typed answers are not queued when the signal drops. | Read from code | P1 |
 | 9 | The client is one 84 KB file of very long lines plus scripts that patch each other's functions. It is hard to change safely. | Read from code | P2 |
 | 10 | Every save rebuilds and compares the **entire database** in memory. Fine for one class, a risk for a whole school. | Read from `database.mjs` | P2 |
+
+### Decisions received (1 November 2026) and what they change
+
+| Decision | Effect on the plan |
+|---|---|
+| Link or QR code is enough on day one | No app-store work. Section 7.3 updated. |
+| English labels only | Yoruba labels removed from the plan. |
+| **No parent accounts.** Admin and teachers see each child's progress and **download a report for parents** for a chosen time period | New section 13 (parent report). The old "parent view" item is dropped. |
+| The Monitor tab must show **realistic, measurable progress**, who needs support, whether a child is grasping each topic, and how to help | New section 12 (support monitor). |
+| First host on `vercel.app`, later a purchased domain | **Warning, section 11:** the app cannot run on Vercel Functions as it is built, and an installed app does not follow a change of domain. |
 
 ### What is already good (keep it)
 
@@ -270,7 +280,7 @@ docs/ tests/ scripts/ public/ (build output only)
 | Form errors | Tie each error to its field (`aria-describedby`), move focus to the first error. |
 | Touch target size | Make every control at least 44 × 44 px. |
 | Reduced motion | A global rule exists; check animations in the lesson widgets. |
-| Language and reading level | Short sentences; consider a plain-language option and optional Yoruba labels for navigation. |
+| Language and reading level | Short sentences and plain English labels (English only, decided 1 Nov 2026). |
 | Maths | Equations need readable text (the editor stores alt text; verify the student view announces it). |
 
 ---
@@ -315,7 +325,7 @@ Problems found:
 | **App Store** (Capacitor wrapper) | None | Annual Apple developer fee, review effort | Only if the school wants an iOS store listing | Apple rejects thin website wrappers; not recommended for version 3. |
 | **Native rewrite** | None | Large | Not needed | Duplicates work; camera, files, push and offline are all possible on the web. |
 
-Recommendation: ship **Step A, then Step B**, hand out a **QR code** poster, and add the **Play Store listing** only if parents ask for it.
+**Decision (1 Nov 2026):** a link and QR code are enough on day one. Ship **Step A, then Step B**, print a **QR code** poster with a one-line install card, and skip the store listings. A Play Store listing can be added later without rebuilding anything.
 
 ### 7.4 What would change in the build
 - A generated `sw.js` with the hashed file list and cache versions.
@@ -339,8 +349,8 @@ Recommendation: ship **Step A, then Step B**, hand out a **QR code** poster, and
 | 8 | Weak-area suggestions on Progress ("Practise fractions") | Turns numbers into action | M |
 | 9 | Calendar view of due dates and live classes, with add-to-calendar | Planning | S |
 | 10 | Photo marking tools (zoom, simple pen markup, comment on a spot) | Notebook marking is the core photo workflow | L |
-| 11 | Parent or guardian read-only view (optional, needs consent design) | Common request in schools | L |
-| 12 | Plain-language and Yoruba labels for navigation (optional) | Reading ease | M |
+| 11 | ~~Parent or guardian accounts~~ **Not wanted.** Replaced by the downloadable parent report (section 13) | Owner decision | n/a |
+| 12 | Plain-language wording check for the English labels | Reading ease | S |
 
 ---
 
@@ -352,14 +362,17 @@ Estimates are working days for one developer and include tests.
 |---|---|---|---:|---|
 | **V3.0 Quick wins** | Cut data use now | Crest and photo conversion; brotli/gzip; ETag/304; cache headers; fix theme colour; PNG and Apple icons; remove crest from pre-cache | 2 | 12-screen student session under 1 MB |
 | **V3.1 Build step and PWA shell** | Installable, fast on repeat | esbuild bundle (role-split, hashed, pre-compressed); new service worker; complete manifest; install and update prompts; offline banner | 5 | Lighthouse PWA checks pass; repeat visit under 20 KB |
+| **V3.0h Hosting** | Run it somewhere safe | Section 11: long-running host, managed Postgres, object storage, HTTPS, backups, health check | 2 | Staging site live; backup and restore rehearsed |
 | **V3.2 Navigation and layout** | Easy to use | Role-specific tabs; context chip; notification bell; consistent names; lesson steps with progress; teacher "Needs attention" and Marking queue; admin review-before-approve | 8 | Walkthrough tests pass at 390 px for all roles |
+| **V3.2m Support monitor** | Know who needs help and why | Section 12: evidence model, support flags, class board, student profile, support plans | 16 | Flagged list agrees with teachers' own list on 80% or more of a pilot class |
+| **V3.2r Parent report** | Reports for parents | Section 13: report builder, editable comments, print and PDF, class bulk run, audit | 8 | A full class of reports generated, reviewed and downloaded in under 10 minutes |
 | **V3.3 Offline and data saver** | Works with little data | Download-week; stale-while-revalidate lessons; outbox with idempotent retries; data-saver switch; smaller `state` calls | 8 | Student can read and answer a downloaded week in airplane mode; no answer lost |
 | **V3.4 Architecture** | Safe to grow | Router table with schema validation; split `app.js` into screen modules; remove monkey-patching; CI with budgets; repository tidy; Node pinning | 10 | CI green; no file over 400 lines; budgets enforced |
 | **V3.5 Data layer** | School-wide scale | Incremental persistence; indexed columns for monitoring and marking; load test with 1,000 students | 6 | Save time independent of database size; monitoring page under 300 ms |
 | **V3.6 Accessibility and polish** | Inclusive | Manual TalkBack and VoiceOver passes; dark-mode and zoom checks; live announcements; 44 px targets; text size floor | 5 | Written test report; zero known blockers |
 | **V3.7 Optional extras** | Re-engagement | Web Push; calendar; CSV export; weak-area suggestions; Play Store listing via TWA | 8 | Per feature |
 
-Total core (V3.0 to V3.6): about **44 working days**. V3.0 and V3.1 alone (7 days) deliver most of what students will notice: a small, fast, installable app.
+Total core (V3.0 to V3.6 plus hosting, support monitor and parent report): about **70 working days**. V3.0, V3.0h and V3.1 (9 days) deliver a small, fast, installable app on real hosting. The support monitor and parent report (24 days) are what teachers and parents will notice most.
 
 ### Quality gates for every phase
 - `npm run build`, `npm test`, `npm run verify-math`, and all browser scripts pass.
@@ -369,14 +382,227 @@ Total core (V3.0 to V3.6): about **44 working days**. V3.0 and V3.1 alone (7 day
 
 ---
 
-## 10. Decisions needed from you
+## 10. Decisions and open questions
 
-1. **App stores:** is a link/QR "Add to Home Screen" enough at first, or must the app appear in Google Play on day one?
-2. **Languages:** English only, or add Yoruba labels (and later other languages)?
-3. **Parents:** should guardians see progress? This needs a consent and privacy decision.
-4. **Hosting:** which domain and host will you use? HTTPS is required for installing and offline use. A host with a CDN would lower data costs further.
-5. **Offline scope:** may students download whole weeks to their phones? Teachers should confirm that any content they do not want stored can be excluded.
-6. **Order of work:** the roadmap above starts with weight and installability. Say if navigation or marking should come first.
+### Decided by the owner (1 November 2026)
+1. Day one is a **link and QR code**, no store listing.
+2. **English only.**
+3. **No parent logins.** Staff download a parent report for a chosen period (section 13) and the Monitor is rebuilt around measurable support (section 12).
+4. First host: **vercel.app** (or another supported host), later a **purchased domain** (see the warnings in section 11).
+
+### Still open (defaults assumed so work is not blocked)
+| Question | Default if you do not answer |
+|---|---|
+| Who may see **all subjects** for one child (needed for the combined report)? | Admin and a **form teacher** assigned per class. Subject teachers see their own subject only. |
+| Should the report show **class position**? | **No** (shows band and trend only). Can be switched on per school. |
+| Does the school use a **grade scale** (A1 to F9, percentages) and **CA/exam weights** for the "scores so far" line? | Use the existing test and exam scores as entered, shown as marks and percentages, with the four support bands from section 12. |
+| Who **signs** the report (class teacher, head teacher)? | A configurable signature line for class teacher and head teacher. |
+| Who **buys the domain** and when? | Decide **before** parents and students install the app (see section 11.3). |
+
+---
+
+## 11. Hosting plan (read this before choosing vercel.app)
+
+### 11.1 The problem
+Vercel runs your code as short-lived **functions**. Vercel's documentation says each function has a **read-only filesystem with a temporary `/tmp` scratch area** ([Vercel runtimes](https://vercel.com/docs/functions/runtimes)). Olawale's Lab is built differently:
+
+| How the app works today | Why it fails on Vercel Functions |
+|---|---|
+| One long-running Node server (`http.createServer` and `listen`) that handles one request at a time | Functions start and stop per request; many copies can run at once. |
+| The **whole database is held in memory** and written back on each save | Two copies would each hold a different version, so one student's save could overwrite another's. |
+| SQLite file and uploaded files stored on local disk | Disk is read-only or temporary and is lost between runs. |
+| Rate limits and upload tokens kept in server memory | Each copy has its own memory, so limits and tokens stop working. |
+
+So pointing `vercel.app` at the current server would appear to work in a quick test and then **lose or overwrite student work**. This is the most serious risk raised by the hosting decision.
+
+### 11.2 Options
+
+| Option | What it takes | Verdict |
+|---|---|---|
+| **A. Long-running Node host first** (a service that runs a normal always-on Node process, with managed PostgreSQL and S3-compatible file storage; examples: Render, Railway, Fly.io, or a small VPS) | Configuration only: the app already supports `DATABASE_URL` for PostgreSQL and `STORAGE_DRIVER=s3` for files. One instance, HTTPS, nightly backups. About **2 days** (V3.0h). | **Recommended for launch.** Safe with the current design. Check each provider's current free-tier limits: some free services sleep when idle, which makes the first request slow. |
+| **B. Vercel with a rewrite** | Stateless request handling, no whole-database cache, per-request database reads, shared rate limiting (for example a Redis service), object storage for files. This is the V3.5 data-layer work, about **6 to 10 days**, plus testing. | Possible later. Not worth doing only to use one host. |
+| **C. Vercel for the pages, another host for the API** | Two origins; the session cookie is `SameSite=Strict`, so sign-in breaks across origins unless the design changes. | **Not recommended.** |
+| **D. Vercel container option** | Vercel's documentation lists a container runtime and background "Daemons". Their limits and costs for a stateful school app were not verified in this audit. | Worth a short trial **only if** you must stay on Vercel. Verify state, storage and pricing first. |
+
+### 11.3 The domain change matters more than the host
+An installed web app, its saved data (sign-in cookie, offline lessons, queued answers) and its service worker belong to **one web address**. If the first address is `something.vercel.app` and the school later buys `school.example`:
+- Everyone who installed the old address **keeps the old app**. It does not follow the move.
+- Students would have to reinstall, and any lessons saved for offline use would need to be downloaded again.
+
+What to do:
+1. **Buy the domain before the public launch** (a domain is a small yearly cost) and use the `vercel.app` or host-provided address only for staff testing.
+2. If you must start on a temporary address, tell staff it is a pilot, do **not** print QR codes yet, and plan the move for a school break.
+3. When you move, put a "We have moved" notice and automatic redirect on the old address and re-issue the QR poster.
+
+### 11.4 Hosting checklist (V3.0h)
+- HTTPS and a custom domain; HTTP/2 or HTTP/3; brotli at the edge or in the app.
+- PostgreSQL with daily backups and a tested restore; S3-compatible private bucket for files (versioned).
+- Environment: `NODE_ENV=production`, `SESSION_SECRET` (32 or more characters), `ADMIN_EMAIL` and `ADMIN_PASSWORD`, `DATABASE_URL`, `DATABASE_SSL=true`, `STORAGE_DRIVER=s3` and the bucket settings (all described in `DEPLOYMENT.md`).
+- **One instance only** until the data layer is rewritten (V3.5).
+- `/healthz` endpoint and an uptime monitor; error alerts by email.
+- Secrets only in the host's settings, never in the repository.
+
+---
+
+## 12. Student support monitor (rebuilding the Monitor tab)
+
+### 12.1 What is wrong with the current Monitor
+It counts **activity** (lessons marked read, exercises attempted, quizzes submitted) and shows percentages of work done. It answers "who has done the work?" but not **"does this child understand the topic, and what help do they need?"** A child can attempt everything and understand nothing, or do little but master it. The teacher currently has to open each student to find out. Staff also see six filters and long explanations before the first student.
+
+### 12.2 Design principles
+1. **Understanding and engagement are measured separately.** A child who did not do the work needs a different response from one who did it and got it wrong.
+2. **Every number shows its evidence** ("62% from 14 answers and 1 quiz"). A score from 2 answers must not look like a score from 40.
+3. **Not enough evidence is a status, not a zero.** Grey "no evidence yet" prevents false alarms in week 1.
+4. **Every flag explains itself and suggests an action** a teacher can take that day.
+5. **Measurable follow-up:** a support plan sets a target, and the system reports whether the child met it.
+6. **Thresholds are visible and adjustable by the admin**, and the rules are documented in the app ("How we calculate this").
+
+### 12.3 The measures (all computed from data the app already stores)
+
+| Measure | Definition (default) | Source |
+|---|---|---|
+| **Understanding score** per topic (one week's topic), 0 to 100 | Weighted average of the evidence that exists: practice accuracy **on the first try** 30%, quizzes and weekly quiz (best of the latest two attempts) 40%, assignment marks 30%. If a source is missing its weight is shared among the others. | practice attempts, assessment attempts, online and photo assignment marks |
+| **Evidence count** | Number of answers plus assessments plus marked assignments behind the score. | same |
+| **Evidence status** | **Enough** at 8 or more answers or at least 1 assessment; **Thin** below that; **None** at 0. Thin and None are never shown as "weak". | same |
+| **Band** | Mastered 85 or more; Proficient 70 to 84; Developing 50 to 69; **Needs support** below 50 (the existing school policy, editable by admin). | `masteryBand` in `core/domain.ts` |
+| **Trend** | Last two topics against the two before: Improving (up 10 or more), Steady, Slipping (down 10 or more). Needs enough evidence in both. | derived |
+| **Engagement score** | Share of released work completed: lessons read, exercises attempted, assignments submitted, quizzes taken, all weighted equally. | existing monitoring |
+| **Timeliness** | Late submissions in the last four assignments. | the `late` flag added in this release |
+| **Persistence** | Average tries before a correct answer, to spot guessing. | practice attempts |
+| **Confidence gap** | The child's own confidence rating (1 to 5, from reflections) against their score. | reflections |
+| **Help requests** | Unanswered questions the child asked and "difficult part" text in reflections. | discussions, reflections |
+| **Active days** | Days in the period with sign-in or foreground activity (presented as "active days", **not** attendance, matching the existing disclaimer). | presence |
+
+### 12.4 Support flags (rules, each with a reason and a suggested action)
+
+| Flag | Rule (default) | Suggested action shown to the teacher |
+|---|---|---|
+| **Struggling with a topic** | Understanding below 50 with enough evidence | Reteach in small group; assign the 5 easiest missed questions again |
+| **Slipping** | Down 15 or more points against the previous topic | Check in; look for a missed lesson or a skipped prerequisite |
+| **Behind** | A released week with no activity after 5 days | Remind; check access (data, phone) |
+| **Guessing** | Averages 3 or more tries before correct on 5 or more questions | Ask them to explain a worked example aloud |
+| **Overconfident** | Confidence 4 or 5 with a score under 50 | Short diagnostic quiz and private feedback |
+| **Asked for help** | Unanswered question or "difficult part" not yet addressed | Reply in the discussion or in person |
+| **Late pattern** | 2 or more of the last 4 assignments late | Talk about workload and reminders |
+| **Inactive** | No activity for 7 days | Contact the family through the school |
+| **Missing work** | Fewer than 60% of released assignments submitted | Agree a catch-up plan |
+
+**Overall status** from the flags and bands: **Needs support now** (any severe flag: Struggling, Slipping with a weak band, or Inactive), **Watch** (one or more lighter flags), **On track**, **Excelling** (Mastered in most topics with good engagement), or **No evidence yet**. The student card shows the **top three reasons** and the numbers behind them.
+
+### 12.5 Screens
+
+**1. Support board (opens by default).**
+- Top strip: counts for **Needs support now · Watch · On track · Excelling · No evidence yet**, each tappable as a filter.
+- The list is sorted by priority. Each row shows photo or initials, name, status, **top reason chips** ("Fractions 41%, 3 late") and a trend arrow. One tap opens the profile.
+- **Topics to reteach** panel: topics where the class average is below 60 or more than a third of the class is in Needs support, with the **most commonly chosen wrong answer** for the three most missed questions (the wrong response is stored with each attempt). This shows *how* they are confused, not just that they are.
+- **Heatmap** toggle: students down, topics across, colour = band, a small dot where evidence is thin.
+- Period selector (this week, last 2 weeks, term, custom dates) and class/subject chips. Everything else is behind "Filters".
+
+**2. Student profile.**
+- Header: name, class, overall status, and **Create report** and **Start support plan** buttons.
+- **Topic table:** understanding score, band, evidence count, trend, confidence, last practised.
+- **Strengths** (top three topics at 70 or more) and **Needs help** (bottom three with enough evidence), each with the questions that were missed and the child's wrong answers.
+- **Timeline:** weekly sparkline of understanding and engagement.
+- **Work:** assignments with status, score, late flag; reflections and questions asked.
+- **Support plans:** open and past, with progress against target.
+
+**3. Support plan.**
+- Fields: topic, action (reteach, extra practice set, pair with a peer, one-to-one, family contact), start date, **target** (for example "reach 70 in Fractions within 14 days"), owner, notes.
+- The system re-measures on the due date and records **Met / Partly / Not met** with the before and after scores. This is the measurable loop the owner asked for.
+
+**4. "How we calculate this"** page (staff only): the formulas above with the current thresholds.
+
+### 12.6 What must be added to the data
+- Tag every question with a **topic and objective** (the `objective` field exists on questions; make it required in the Studio readiness checks so scores can be grouped).
+- Store a **time** with every assessment answer (practice attempts already have one).
+- Add `form_teacher` on classes, `support_plans`, and an `indicator_settings` record for thresholds.
+- A nightly job (or on-demand compute with caching) that produces a per-student, per-topic summary so the board loads in under a second.
+- Cross-subject view for admin and form teachers; subject teachers stay limited to their subject.
+
+### 12.7 How to prove it is realistic
+1. **Pilot one class for a term.** Before showing flags, ask each teacher to list the children they think need support.
+2. Compare: the share of the teachers' children that the board flags (target 80% or more), and the share of flagged children the teacher agrees with (target 70% or more).
+3. Review every disagreement with the teacher, adjust the thresholds, and record why.
+4. Add **fixtures and unit tests** for each formula (a child who guesses, a child who did nothing, a child with two answers) so the rules cannot drift.
+5. Show a "Data confidence" note whenever evidence is thin.
+
+---
+
+## 13. Parent progress report (download only)
+
+### 13.1 Who, what, when
+- **Who:** the admin and the child's form teacher can produce a combined report; a subject teacher can produce the section for their own subject.
+- **When:** any period ("from" and "to" dates), a term, or the session so far.
+- **Output:** a one-click **PDF** (A4) and a print view; one child, or the **whole class at once** (one combined file or one file per child).
+- **No parent accounts.** Staff send the file by the school's usual channel.
+
+### 13.2 Contents (one to two pages per child)
+
+| Block | Contents |
+|---|---|
+| **Header** | School logo and name, motto, "Progress report", period, date generated |
+| **Child** | Name, admission number, class, academic session, term, optional photo |
+| **At a glance** | Overall understanding band and score, engagement, assignments submitted and late, active days, trend arrow, test and exam scores so far |
+| **Subjects table** | One row per subject: teacher, understanding score and band, engagement, assignments (submitted and late), test and exam marks, trend |
+| **Per-subject analysis** | **Strengths** (topics at 70 or more) and **Weaknesses** (topics below 50 with enough evidence), each with the evidence behind it, and a **how to help** line |
+| **Overall comment** | A draft from the data, edited by the teacher, covering effort, understanding, behaviour in the app and next steps |
+| **Home suggestions** | Two or three specific, realistic suggestions ("10 minutes on fractions, three evenings a week") |
+| **Signatures** | Class teacher and head teacher lines |
+| **Footer** | How scores are calculated (one sentence), confidentiality line, page numbers, "Generated by Olawale's Lab" |
+
+Sample layout (not final design):
+
+```
++------------------------------------------------------------------+
+| [LOGO]  GRACE-FIELD COLLEGE, IBADAN        PROGRESS REPORT       |
+|         Raising young minds for future impact                    |
+|------------------------------------------------------------------|
+| Name: Ayomide Johnson      Admission: GF/2026/001   Class: SS1   |
+| Session: 2026/2027         Term: First term                      |
+| Period: 14 Sep 2026 to 31 Oct 2026      Generated: 1 Nov 2026    |
+|------------------------------------------------------------------|
+| AT A GLANCE   Understanding 68% (Developing, improving)          |
+|               Engagement 91%   Assignments 5/6 (1 late)         |
+|------------------------------------------------------------------|
+| Subject      Understanding  Band         Engagement  Trend       |
+| Mathematics  68%            Developing   91%         up          |
+| English      81%            Proficient   88%         steady      |
+|------------------------------------------------------------------|
+| MATHEMATICS                                                      |
+|  Strengths : Number bases (88%), Indices (74%)                   |
+|  Needs help: Fractions (41%, 14 answers) - mixes up denominators |
+|  How to help: 10 minutes of fraction practice, 3 evenings a week |
+|------------------------------------------------------------------|
+| OVERALL COMMENT (editable)                                       |
+|  Ayomide works steadily and is improving...                      |
+|------------------------------------------------------------------|
+| Class teacher ______________   Head teacher ______________       |
++------------------------------------------------------------------+
+```
+
+### 13.3 How comments are produced
+- **Rule-based sentences** built from the measures in 12.3 (for example: "[Name] is **Developing** in Mathematics (68%) and **improving** from 59% earlier this term. Strongest topic: Number bases. Needs more practice on Fractions, where common errors were mixing denominators.").
+- Every sentence is backed by a number that appears in the report. No invented praise or criticism.
+- The teacher **reviews and edits** every comment before release. Edits are saved with the report.
+- A child with thin evidence gets "Not enough work yet to judge understanding in [topic]" rather than a weak label.
+
+### 13.4 Workflow and safeguards
+1. **Draft** (system creates), **Reviewed** (teacher edits), **Released** (admin or form teacher approves and downloads).
+2. Each released report is saved as an **immutable snapshot** (the numbers and comments as they were), with who created, edited and downloaded it and when. This lets the school answer "what did we tell the parents in October?"
+3. Access limited to admin, the form teacher and the subject teacher for their own section. Downloads are logged. **No public links.**
+4. The PDF is small (target under 200 KB, system fonts only) so it can be shared on a phone with little data. On phones the **Share** button offers the file to other apps through the browser's share feature.
+
+### 13.5 How it is built
+- A report page with an A4 print stylesheet is the first version (no server work, works offline, easy to review).
+- Server PDF generation (a small PDF library) is added in the same phase so the file can be saved and shared directly.
+- Data comes from the same measures as the Support board, so the report and the Monitor can never disagree.
+- New tables: `report_snapshots` (child, period, JSON of figures, comments, status, audit fields) and the school's report settings (name, logo, signatures, bands).
+
+### 13.6 Acceptance
+- A teacher can produce, edit and download a full class of reports in under 10 minutes.
+- Numbers in the report match the Monitor for the same child and period (automated test).
+- Every comment sentence maps to a stored measure (automated test).
+- The PDF opens correctly on Android, iPhone and desktop, prints cleanly on A4, and stays under 200 KB.
 
 ---
 

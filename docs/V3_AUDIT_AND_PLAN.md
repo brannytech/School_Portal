@@ -826,6 +826,27 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 7. **Done when:** a new school imports SS1 Mathematics Week 1 to 13 in one action and edits its own copy.
 **Estimate:** 4 working days.
 
+### 16.6e Hosting decision (2 November 2026)
+**One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.
+
+**Risks and answers:** an outage affects every school (managed Postgres with daily backups, automatic restart on the health check, per-school backups); all schools' data sits in one process's memory (fine for dozens of schools; V3.5 saves only changes and adds indexes before the platform nears 100; or split schools across two copies); the owner becomes responsible for children's data (data-processing agreement with each school, review against the Nigeria Data Protection Act).
+
+**Free tiers are not suitable for real students** (prices checked on 2 November 2026; they change, so check again before buying):
+| Host | Free option | Why it fails here | Paid starting point |
+|---|---|---|---|
+| Render | Free web service and free Postgres | Web service sleeps after 15 minutes idle (about a minute to wake); free Postgres is 1 GB and expires after 30 days; no persistent disk listed | Not checked; see Render's pricing page |
+| Fly.io | None listed | n/a | Small machine about $2.19 a month; managed Postgres from $38 a month; volumes $0.15 per GB |
+| Railway | $1 free credit a month and a one-time $5 trial | Too little for an always-on app plus a database | Hobby $5 a month including $5 of usage; Pro $20 a month |
+
+**Choice:** Railway Hobby for the pilot (cheapest paid option, runs the `Dockerfile`, Postgres and storage in one place; expect roughly $5 to $15 a month, an estimate to be confirmed on the first invoice). Render's paid plan is the alternative if fixed prices and a simpler dashboard are preferred. Fly.io only later (its managed Postgres is expensive for a pilot). Upgrade when schools are paying; the code does not change between hosts.
+
+**Before choosing:** pick the region nearest Nigeria that the host offers (not yet checked per host); use a separate S3-compatible bucket for uploaded files rather than the host's disk.
+
+**Staging checklist (when the owner is ready to pay for a host):** create the project and Postgres; set the variables in `DEPLOYMENT.md` (`NODE_ENV`, `SESSION_SECRET`, `DATABASE_URL`, `COOKIE_SECURE=true`, `PLATFORM_OWNER_*`, `ADMIN_*`, S3 settings); deploy the `Dockerfile`; confirm `/api/health`; create two test schools at `/platform`; run the live S3 isolation test; take a backup and rehearse a restore; only then add the pilot school.
+
+### 16.6f Working locally first (no subscriptions needed)
+Everything built so far runs on one computer with no paid service: SQLite databases, local uploads folder, all tests (`npm test`), all browser checks, the owner screen and several schools. Hosting is needed only when other people must reach the app from their own phones, and the S3 bucket only when files must live outside the server's disk. Order of work: finish the product locally (steps 4 onward, Week 1 to 13 content, the support monitor, the parent report, the remaining adjustments), then buy hosting for the pilot. For short tests with real users before that, a temporary tunnel to the local computer can be used; it is not suitable for real student records.
+
 ### 16.7 How 100 schools get onto the platform (no command line)
 The command in step 1 is a temporary tool. Onboarding happens in two stages.
 

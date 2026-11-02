@@ -94,7 +94,7 @@ const first=tenants.get(DEFAULT_CODE)||[...tenants.values()][0];
 export const schoolCodes=()=>registry.schools.map(s=>({code:s.code,name:tenants.get(s.code)?.db.school.name||s.name,status:s.status}));
 export const schoolCount=()=>tenants.size;
 export const findSchool=code=>typeof code==='string'?tenants.get(code.trim().toLowerCase()):undefined;
-export const onlySchool=()=>tenants.size===1?first:undefined;
+export const onlySchool=()=>tenants.size===1?[...tenants.values()][0]:undefined;
 export async function createSchool({code,name,adminEmail,adminPassword}){
  code=String(code||'').trim().toLowerCase();
  if(!validCode(code))throw Object.assign(Error('School code: use 2 to 31 lowercase letters, numbers or hyphens.'),{status:400});
@@ -121,3 +121,23 @@ export const tenantDir=()=>currentTenant().dir;
 export const storagePrefix=()=>currentTenant().isDefault?'private/':`schools/${currentTenant().slug}/private/`;
 export const sessionStore=()=>currentTenant().sessions;
 export const uploadLinks=()=>currentTenant().uploadTokens;
+
+// ---- Platform-owner helpers. They return counts and health only, never people or records. ----
+const folderSize=d=>{let n=0;try{for(const e of fs.readdirSync(d,{withFileTypes:true}))n+=e.isDirectory()?folderSize(path.join(d,e.name)):fs.statSync(path.join(d,e.name)).size;}catch{}return n;};
+export const schoolList=()=>registry.schools.map(s=>{const t=tenants.get(s.code);return {code:s.code,name:t?.db.school.name||s.name||s.code,status:s.status||'ACTIVE',createdAt:s.createdAt,
+ students:t?t.db.users.filter(u=>u.role==='STUDENT'&&u.status==='ACTIVE').length:null,teachers:t?t.db.users.filter(u=>u.role==='TEACHER'&&u.status==='ACTIVE').length:null,
+ lastActivity:t?(t.db.audit.at(-1)?.at||null):null,storageBytes:t?folderSize(path.join(t.dir,'uploads')):null};});
+export async function setSchoolStatus(code,status){
+ const entry=registry.schools.find(s=>s.code===code);if(!entry)throw Object.assign(Error('Unknown school.'),{status:404});
+ if(!['ACTIVE','SUSPENDED'].includes(status))throw Object.assign(Error('Status must be ACTIVE or SUSPENDED.'),{status:400});
+ if(status==='SUSPENDED'){const t=tenants.get(code);if(t){tenants.delete(code);try{await t.sql.close();}catch{}}}
+ else if(!tenants.has(code))tenants.set(code,await loadTenant(code,schoolDir(code),{name:entry.name||undefined}));
+ entry.status=status;writeRegistry(registry);
+}
+export async function resetSchoolAdmin(code,password){
+ const t=tenants.get(code);if(!t)throw Object.assign(Error('That school is not active.'),{status:404});
+ const admin=t.db.users.find(u=>u.role==='ADMIN'&&u.status==='ACTIVE');if(!admin)throw Object.assign(Error('This school has no active administrator.'),{status:404});
+ admin.password=hash(password);admin.mustChangePassword=true;t.db.audit.push({id:randomBytes(16).toString('hex'),user:admin.id,action:'Administrator password reset by the platform owner',at:new Date().toISOString()});
+ await t.save();await t.sessions.revoke(admin.id);return admin.email;
+}
+export const platformDir=()=>rootDir;

@@ -93,3 +93,5 @@ dialog::backdrop{background:#071729a8}
 }
 
 .account-footer-logout{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;color:var(--muted)}
+
+.crest-badge{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--green);color:#fff;font-weight:800;font-size:16px;letter-spacing:.5px;flex:none}.school .crest-badge{width:34px;height:37px;font-size:13px}.auth-visual:not(:has(.auth-photo)){background:linear-gradient(160deg,var(--green),#0b2a3f)}.auth-brand .crest-badge{background:#fff3;color:#fff}

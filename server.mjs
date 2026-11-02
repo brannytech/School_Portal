@@ -10,6 +10,8 @@ import {monitoringApi} from './monitoring.mjs';
 import {weeklyContentApi,assignmentOpen,closingOpen,studentAssignment} from './weekly-content.mjs';
 import {recordStudentPresence} from './presence.mjs';
 import {adminDirectory} from './admin-directory.mjs';
+import {publicBrand,serveBrandImage,brandingApi} from './branding.mjs';
+import {platformApi} from './platform.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
@@ -50,7 +52,7 @@ async function handle(req,res){
  try{
  if(!url.pathname.startsWith('/api/')){
   if(!['GET','HEAD'].includes(req.method))fail(405,'Method not allowed.');
-  const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
+  const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname==='/platform'?'/platform.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
   const types={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
   res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-cache'});if(req.method==='HEAD')res.end();else fs.createReadStream(file).pipe(res);return;
  }
@@ -58,22 +60,24 @@ async function handle(req,res){
  if(!['GET','HEAD'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Request origin not allowed.');
  const endpoint=url.pathname.slice(5);const method=req.method;
  let b={};if(['POST','PATCH','DELETE'].includes(method)){if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Expected JSON.');try{b=JSON.parse((await body(req)).toString()||'{}');}catch(e){if(e.status)throw e;fail(400,'Invalid JSON.');}}
+ if(endpoint.startsWith('platform/')){await platformApi({endpoint,method,b,req,res,json,fail,rate});return;}
  const rawCookie=(req.headers.cookie||'').match(/(?:^|; )lab_session=([^;]+)/)?.[1]||'';
  const dot=rawCookie.indexOf('.'),cookieCode=dot>0?rawCookie.slice(0,dot):'',sid=dot>0?rawCookie.slice(dot+1):rawCookie;
  // Which school is this request for? Sign-in style requests name it (school code); everything else follows the signed-in cookie.
- const naming=(['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)&&method==='POST')?text(b.school,40).toLowerCase():endpoint==='config'?text(url.searchParams.get('school')||'',40).toLowerCase():'';
+ const naming=(['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)&&method==='POST')?text(b.school,40).toLowerCase():(endpoint==='config'||endpoint.startsWith('brand/'))?text(url.searchParams.get('school')||'',40).toLowerCase():'';
  if(naming)rate('school-code:'+req.socket.remoteAddress,40);
  const tenant=naming?findSchool(naming):cookieCode?findSchool(cookieCode):onlySchool();
  if(naming&&!tenant)fail(404,'School code not recognised. Check it with your school.');
  if(!tenant){
-  if(endpoint==='config'&&method==='GET'){json({demo,school:null,multi:true,selfRegistration:false});return;}
+  if(endpoint==='config'&&method==='GET'){json({demo,school:null,brand:null,multi:true,selfRegistration:false});return;}
   fail(['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)?400:401,['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)?'Enter your school code.':'Please sign in to continue.');
  }
  const reqScope=requestScope.getStore();reqScope.tenant=tenant;reqScope.sessionId=tenant.db.currentSessionId;
  session=await sessions.get(sid);
  if(session&&session.expires<Date.now()){await sessions.delete(sid);session=null;}
  let u=session&&db.users.find(v=>v.id===session.user&&v.status==='ACTIVE');
- if(endpoint==='config'&&method==='GET'){json({demo,school:db.school,multi:schoolCount()>1,selfRegistration:demo||process.env.SELF_REGISTRATION==='true'});return;}
+ if(endpoint==='config'&&method==='GET'){json({demo,school:db.school,brand:publicBrand(),multi:schoolCount()>1,selfRegistration:demo||process.env.SELF_REGISTRATION==='true'});return;}
+ if(endpoint.startsWith('brand/')&&method==='GET'){await serveBrandImage(endpoint.slice(6),req,res,fail);return;}
  if((endpoint==='login'||endpoint==='demo-login')&&method==='POST'){
   rate('login:'+req.socket.remoteAddress,15);const user=endpoint==='demo-login'&&demo?db.users.find(v=>v.id===text(b.role).toLowerCase()):db.users.find(v=>v.email.toLowerCase()===text(b.email).toLowerCase());if(endpoint==='demo-login'&&!demo)fail(404,'Not found.');if(!user||(endpoint!=='demo-login'&&!matches(String(b.password||''),user.password)))fail(401,'Email or password is incorrect.');if(user.status!=='ACTIVE')fail(403,user.status==='PENDING'?'Your account is awaiting admin approval.':`Your account is ${user.status.toLowerCase()}. Contact the school administrator.`);
   if(sid)await sessions.delete(sid);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');await sessions.set(id,{user:user.id,csrf,expires:Date.now()+8*3600000});res.setHeader('Set-Cookie',cookieFor(id));await recordStudentPresence(user);json({user:safeUser(user),csrf});return;
@@ -174,6 +178,7 @@ async function handle(req,res){
  if(endpoint==='reflection-reply'&&method==='POST'){const r=db.reflections.find(v=>v.id===b.id);if(!r)fail(404,'Reflection not found.');scope(u,r.class,r.subject);r.reply=needed(text(b.text),'Feedback');await save();json(r);return;}
  if(u.role!=='ADMIN')fail(403,'Admin access required.');
  if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);db.sessions.find(v=>v.id===academicSession()).currentTerm=db.currentTerm;audit(u,`Current term set to ${db.currentTerm}`);await save();json({ok:true});return;}
+ if(await brandingApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(belongs(v)&&v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({id:randomUUID(),teacher:b.teacher,class:c,subject:s,sessionId:academicSession()});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);await save();json({ok:true});return;}
  if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);await save();json({ok:true});return;}
  fail(404,'Endpoint not found.');

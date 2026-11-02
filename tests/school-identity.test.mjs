@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import {freshDatabase} from './helpers/database.mjs';
 import zlib from 'node:zlib';
 
 const chunk=(type,data)=>{const body=Buffer.concat([Buffer.from(type),data]),out=Buffer.alloc(12+data.length);out.writeUInt32BE(data.length,0);body.copy(out,4);out.writeUInt32BE(zlib.crc32(body),8+data.length);return out;};
 function png(){const header=Buffer.alloc(13);header.writeUInt32BE(1,0);header.writeUInt32BE(1,4);header[8]=8;header[9]=2;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',zlib.deflateSync(Buffer.from([0,200,30,30]))),chunk('IEND',Buffer.alloc(0))]);}
 
 test('Platform owner creates schools; each school has its own identity; suspended schools are closed',async()=>{
- const dir=path.resolve('test-results','school-identity-'+Date.now());fs.mkdirSync(dir,{recursive:true});
+ const dir=path.resolve('test-results','school-identity-'+Date.now());fs.mkdirSync(dir,{recursive:true});const pg=await freshDatabase();
  let base='',output='';
- const server=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,NODE_ENV:'production',DEMO_MODE:'false',DATA_DIR:dir,PORT:'0',SESSION_SECRET:'a-test-only-secret-that-is-long-enough-for-isolated-tests',ADMIN_EMAIL:'head@main.test',ADMIN_PASSWORD:'Main-initial-password-1!',PLATFORM_OWNER_EMAIL:'owner@platform.test',PLATFORM_OWNER_PASSWORD:'Owner-initial-password-1!'},stdio:['ignore','pipe','pipe']});
+ const server=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...process.env,NODE_ENV:'production',DEMO_MODE:'false',DATA_DIR:dir,DATABASE_URL:pg?.url||'',PORT:'0',SESSION_SECRET:'a-test-only-secret-that-is-long-enough-for-isolated-tests',ADMIN_EMAIL:'head@main.test',ADMIN_PASSWORD:'Main-initial-password-1!',PLATFORM_OWNER_EMAIL:'owner@platform.test',PLATFORM_OWNER_PASSWORD:'Owner-initial-password-1!'},stdio:['ignore','pipe','pipe']});
  server.stdout.on('data',b=>{output+=b;base=output.match(/ready at (http:\/\/127\.0\.0\.1:\d+)/)?.[1]||'';});server.stderr.on('data',b=>output+=b);
  try{
   for(let i=0;i<150&&!base;i++)await new Promise(r=>setTimeout(r,100));assert(base,output);
@@ -31,7 +32,7 @@ test('Platform owner creates schools; each school has its own identity; suspende
   const beta=await owner('create-school',{code:'beta',name:'Beta College',adminEmail:'head@beta.test'},o);assert.equal(beta.status,201);
   assert.equal((await owner('create-school',{code:'alpha',name:'Again',adminEmail:'x@y.test'},o)).status,409);
   const listing=await owner('schools',null,o);assert.deepEqual(listing.value.schools.map(s=>s.code).sort(),['alpha','beta','main']);
-  assert.deepEqual(Object.keys(listing.value.schools[0]).sort(),['code','createdAt','lastActivity','name','status','storageBytes','students','teachers'],'only counts and health');
+  assert.deepEqual(Object.keys(listing.value.schools[0]).sort(),['code','createdAt','lastActivity','limits','name','status','storageBytes','students','teachers'],'only counts and health');
   assert(!JSON.stringify(listing.value).includes('head@alpha.test')&&!/password/i.test(JSON.stringify(listing.value)),'no people or secrets in the owner listing');
 
   // A school administrator has no access to the owner screen.
@@ -73,5 +74,5 @@ test('Platform owner creates schools; each school has its own identity; suspende
 
   // The owner screen is a plain page that never needs a school code.
   assert.equal((await fetch(base+'/platform')).status,200);
- }finally{server.kill();}
+ }finally{server.kill();await pg?.cleanup();}
 });

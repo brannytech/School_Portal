@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {db, save, tenantDir, storagePrefix} from './store.mjs';
+import {db, save, tenantDir, storagePrefix, assertStorageAvailable} from './store.mjs';
 import {cleanImage} from './images.mjs';
 import {canViewStudent,canEditStudentPhoto,hasStudentPrivilege,assignedClasses} from './student-access.mjs';
 import {storeFile, streamFile} from './storage.mjs';
@@ -24,7 +24,7 @@ export async function profileApi({endpoint, method, url, req, res, u, body, json
  if(!staged && u.role==='STUDENT' && !target.photoId) fail(403,'Ask your administrator to add your initial profile photo first.');
  const cleaned=cleanImage(await body(req,700*1024));
  const photo={id:randomUUID(),owner:target?.id||null,uploader:u.id,type:cleaned.type,size:cleaned.bytes.length,created:new Date().toISOString()};
- photo.storage=await storeFile(tenantDir(),photo.id,cleaned.bytes,photo.type,storagePrefix());
+ assertStorageAvailable(cleaned.bytes.length);photo.storage=await storeFile(tenantDir(),photo.id,cleaned.bytes,photo.type,storagePrefix());
  db.profilePhotos??=[];
  db.profilePhotos.push(photo);
  if(target) {target.photoId=photo.id;audit(u,`Updated profile photo for ${target.name}`);}

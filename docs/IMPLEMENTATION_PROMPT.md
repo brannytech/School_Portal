@@ -14,7 +14,8 @@ You are continuing work on **Olawale's Lab**, a multi-school learning platform f
 ## 2. Branches and state
 - `main`: last released version (do not push to it).
 - `clean-platform-v2` (PR #4): clean-state platform, Lesson Studio v2, question images, late-work marking, small-window Studio, improved question import. Merge first.
-- `multi-school` (PR #6, stacked on #4): **step 1 of multi-school done**: one database and uploads folder per school, requests routed per school, school code at sign-in, `npm run create-school`, isolation tests.
+- `multi-school` (PR #6, stacked on #4): **step 1 done**: one database and uploads folder per school, requests routed per school, school code at sign-in, `npm run create-school`, isolation tests.
+- `school-identity` (PR #7, stacked on #6): **step 2 done**: per-school profile and branding (`branding.mjs`, `public/school-settings.js`), platform owner at `/platform` (`platform.mjs`, `public/platform.js`), tests `tests/school-identity.test.mjs` and `scripts/verify-school-identity.mjs`. Merge in order #4, #6, #7.
 - `audit-v3`: documentation only (the plan).
 Create each new piece of work on its **own branch from the newest merged work** and open one pull request per step. Never leave `main` or a merged branch broken.
 
@@ -38,14 +39,14 @@ Create each new piece of work on its **own branch from the newest merged work** 
 8. Never commit secrets, real student data or `test-results/`.
 
 ## 5. How to work
-- Install and build: `npm install`, `npm run build`. Tests: `npm test` (109 pass at the end of step 1). Browser checks need Playwright and Chromium; see the environment variables used in `scripts/*.mjs` (`PLAYWRIGHT_MODULE`, `AUDIT_BROWSER_PATH`) and run at least `npm run verify-studio-v2`, `verify-assignments`, `verify-questions`, `verify-studio-small` for anything touching those screens.
+- Install and build: `npm install`, `npm run build`. Tests: `npm test` (110 pass at the end of step 2). Browser checks need Playwright and Chromium; see the environment variables used in `scripts/*.mjs` (`PLAYWRIGHT_MODULE`, `AUDIT_BROWSER_PATH`) and run at least `npm run verify-studio-v2`, `verify-assignments`, `verify-questions`, `verify-studio-small` for anything touching those screens.
 - Bump the cache name in `public/sw.js` (`olawale-shell-vNN`) whenever any file in `public/` changes.
 - Write the test first for each rule you add; keep the whole suite green before every commit.
 - Small commits with clear messages; one pull request per step with a summary, how it was tested, and anything not done.
 - Update `docs/V3_AUDIT_AND_PLAN.md` (the step's status and limits) and this prompt when a step is finished.
 
 ## 6. Work to do, in this order
-### Step 2: school identity and platform owner (5 days; plan section 16.6)
+### Step 2: school identity and platform owner (DONE, PR #7; kept for reference. Left out: delete school, consent-based support access, invitation emails; see plan 16.6a)
 - Per-school settings stored in each school's database: name, short name, motto, crest, building photo, accent colour (contrast-checked), report header lines (address, phone, principal). Crest and photo are converted to small images, stored in that school's folder, and served from a cacheable, school-scoped public route because they show before sign-in.
 - Remove every hard-coded "Grace-Field" (`public/app.js`, `index.html`, manifest, service worker pre-cache list, print styles). New schools start with neutral branding (initials badge).
 - After the school code is typed on the sign-in page, fetch `/api/config?school=<code>` and show that school's name, crest and colour; remember the code on the device.
@@ -53,7 +54,7 @@ Create each new piece of work on its **own branch from the newest merged work** 
 - Tests: branding never leaks between schools; invalid colours and non-image or oversized logos are rejected; a school admin cannot reach `/platform`; suspended schools cannot sign in and existing sessions stop; the owner API never returns student data.
 - Done when: the owner creates two schools from the screen and each shows its own branding on sign-in and inside the app, and the isolation tests still pass.
 
-### Step 3: hosting (plan section 11)
+### Step 3: hosting (NEXT; plan sections 11 and 16.6b)
 Long-running host (not Vercel Functions: the filesystem is read-only), managed Postgres with a schema per school (written in step 1 but **never run against a live Postgres**: test it first), S3-compatible storage with the per-school prefix, HTTPS, health check, per-school backup and restore (restoring one school must not touch another), per-school limits (storage, students). Staging with two real schools.
 
 ### Step 4: shared curriculum library (plan 16.4)

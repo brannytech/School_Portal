@@ -720,7 +720,7 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 | Step | Work | Done when |
 |---|---|---|
 | **1. Tenant isolation (done, branch `multi-school`)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
-| **2. School identity and platform owner** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
+| **2. School identity and platform owner (done, branch `school-identity`, PR #7)** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
 | **3. Hosting** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
 | **4. Shared curriculum library** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
 | **5. Later** | Sub-domain per school, custom domain per school, plans and billing, school self-sign-up | Per feature |
@@ -748,7 +748,7 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 - Creating or deleting a school's data leaves the other school's database file unchanged.
 - Uploaded files are stored and read only below the owning school's folder; path tricks (`..`, absolute paths) in a school code are rejected.
 
-### 16.6 Step 2 in detail: school identity and platform owner (next)
+### 16.6 Step 2 in detail: school identity and platform owner (delivered)
 
 **A. Per-school settings** (stored in each school's own database, editable by that school's admin)
 | Setting | Used on |
@@ -773,6 +773,31 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 
 **E. Done when:** the owner creates two schools from the screen, each shows its own name, crest and colour on the sign-in page and in the app, and the isolation tests from 16.5 still pass.
 
+**Estimate:** 5 working days.
+
+### 16.6a What step 2 delivered, and what it left out
+**Delivered**
+- School profile (administrator only): name, short name, motto, main colour (refused if too light for white text), crest, building photo, principal, phone and address for reports. Stored in that school's own database and folder. The first school keeps its original crest and photo until it uploads its own; new schools get an initials badge and the default colour.
+- Sign-in: after the school code is typed the page swaps in that school's name, colour and crest. After sign-in the sidebar, page title and buttons use the school's identity; saving the profile updates the screen at once.
+- Platform owner at `/platform`: separate sign-in (own `platform.sqlite`, own cookie, forced password change, 12+ character passwords, rate limited, audited). List of schools with counts, last activity and storage only; create a school (temporary password shown once); suspend and reopen (suspended schools cannot sign in and their sessions stop); reset a school administrator's password (forced change).
+- The first owner is created from `PLATFORM_OWNER_EMAIL` and `PLATFORM_OWNER_PASSWORD` (12+ characters); without them the screen says no owner is set up.
+- Tests: `tests/school-identity.test.mjs` and `scripts/verify-school-identity.mjs` (110 tests pass in total).
+
+**Left out on purpose (still to do)**
+- Deleting a school (needs typed confirmation and a backup first) and the consent-based "enter as admin" support access (needs the school's approval and a line in its audit log).
+- Invitation emails (there is no mail service yet; the temporary password is shown once on screen).
+- Owner database on Postgres (it is a SQLite file; on a host with a temporary disk it must move to Postgres, step 3).
+- The parent report header uses the stored address, phone and principal; the report itself is section 13.
+- The service worker still pre-caches the first school's crest and photo (V3.0 quick wins).
+
+### 16.6b Step 3 in detail: hosting (next)
+1. **Postgres per school:** run the schema-per-school code against a real Postgres for the first time; fix what it finds; migrations run per school on creation and on startup.
+2. **Owner database to Postgres** (a `platform` schema) so it survives host restarts.
+3. **Object storage:** S3-compatible bucket with the per-school prefix (`schools/<code>/private/`); brand images included; a test that a file of school A cannot be read through school B.
+4. **Host:** a long-running host (not Vercel Functions: read-only filesystem), HTTPS, `COOKIE_SECURE=true`, health check endpoint, environment variables documented in `DEPLOYMENT.md`.
+5. **Backups and restore per school** (export one school's database and files; restore it without touching the others) and a rehearsal.
+6. **Limits per school** (students, storage) enforced and visible on the owner screen.
+7. **Done when:** staging with two real schools, a restore of one school leaves the other untouched, and the isolation tests pass against Postgres and S3.
 **Estimate:** 5 working days.
 
 ### 16.7 How 100 schools get onto the platform (no command line)

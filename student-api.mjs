@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {db,save,hash} from './store.mjs';
+import {db,save,hash,assertCanAddStudent} from './store.mjs';
 import {academicSession} from './context.mjs';
 import {registrationPhoto} from './profile-api.mjs';
 import {assignedClasses,studentClass,hasStudentPrivilege,canViewStudent} from './student-access.mjs';
@@ -31,6 +31,7 @@ export async function studentApi({endpoint,method,b,url,u,c,json,fail,audit,sess
  if(endpoint==='add-user'&&method==='POST') {
   if(!hasStudentPrivilege(u,'registerStudents'))fail(403,'Your administrator must grant student-registration access.');
   if(u.role!=='ADMIN'&&b.role!=='STUDENT')fail(403,'Teachers can register student accounts only.');
+  if(b.role==='STUDENT')assertCanAddStudent();
   if(!assignedClasses(u).includes(c))fail(403,'Choose one of your assigned classes.');
   if(u.role!=='ADMIN'&&academicSession()!==db.currentSessionId)fail(403,'Register students in the current academic session.');
   const email=text(b.email).toLowerCase(),name=text(b.name,100);if(!name)fail(400,'Name is required.');

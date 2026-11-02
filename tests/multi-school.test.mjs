@@ -3,16 +3,17 @@ import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import {freshDatabase} from './helpers/database.mjs';
 
 // Two schools on one installation must be completely separate: accounts, data, sessions and files.
 test('Schools are isolated: separate accounts, sessions, ids, lists and folders',async()=>{
- const dir=path.resolve('test-results','multi-school-'+Date.now());fs.mkdirSync(dir,{recursive:true});
- const env={...process.env,NODE_ENV:'production',DEMO_MODE:'false',DATA_DIR:dir,SESSION_SECRET:'a-test-only-secret-that-is-long-enough-for-isolated-tests',ADMIN_EMAIL:'head@shared.test',ADMIN_PASSWORD:'Main-initial-password-1!'};
+ const dir=path.resolve('test-results','multi-school-'+Date.now());fs.mkdirSync(dir,{recursive:true});const pg=await freshDatabase();
+ const env={...process.env,NODE_ENV:'production',DEMO_MODE:'false',DATA_DIR:dir,DATABASE_URL:pg?.url||'',SESSION_SECRET:'a-test-only-secret-that-is-long-enough-for-isolated-tests',ADMIN_EMAIL:'head@shared.test',ADMIN_PASSWORD:'Main-initial-password-1!'};
  const made=spawnSync(process.execPath,['--experimental-sqlite','scripts/create-school.mjs','--code','beta','--name','Beta Academy','--admin-email','head@shared.test','--password','Beta-initial-password-1!'],{env,encoding:'utf8'});
  assert.equal(made.status,0,made.stdout+made.stderr);
  assert.notEqual(spawnSync(process.execPath,['--experimental-sqlite','scripts/create-school.mjs','--code','beta','--admin-email','x@y.test'],{env,encoding:'utf8'}).status,0,'a school code cannot be reused');
  assert.notEqual(spawnSync(process.execPath,['--experimental-sqlite','scripts/create-school.mjs','--code','../evil','--admin-email','x@y.test'],{env,encoding:'utf8'}).status,0,'path tricks in a school code are rejected');
- assert(fs.existsSync(path.join(dir,'schools','beta','school.sqlite')),'beta has its own database file');
+ if(!pg)assert(fs.existsSync(path.join(dir,'schools','beta','school.sqlite')),'beta has its own database file');
  assert(!fs.existsSync(path.join(dir,'schools','..','evil')));
  let base='',output='';
  const server=spawn(process.execPath,['--experimental-sqlite','server.mjs'],{env:{...env,PORT:'0'},stdio:['ignore','pipe','pipe']});
@@ -60,7 +61,7 @@ test('Schools are isolated: separate accounts, sessions, ids, lists and folders'
   assert(!JSON.stringify((await req('admin-directory',null,beta)).value||'').includes('Ada Main'));
 
   // Each school's data lives in its own folder.
-  assert(fs.existsSync(path.join(dir,'school.sqlite'))&&fs.existsSync(path.join(dir,'schools','beta','school.sqlite')));
+  if(!pg)assert(fs.existsSync(path.join(dir,'school.sqlite'))&&fs.existsSync(path.join(dir,'schools','beta','school.sqlite')));
   const registry=JSON.parse(fs.readFileSync(path.join(dir,'schools.json'),'utf8'));assert.deepEqual(registry.schools.map(s=>s.code).sort(),['beta','main']);
- }finally{server.kill();}
+ }finally{server.kill();await pg?.cleanup();}
 });

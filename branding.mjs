@@ -1,7 +1,7 @@
 // School identity: name, motto, colour, crest, building photo and report header lines.
 // Everything here lives in the current school's own database and folder (see store.mjs).
 import {randomBytes} from 'node:crypto';
-import {db,save,tenantDir,storagePrefix,currentTenant} from './store.mjs';
+import {db,save,tenantDir,storagePrefix,currentTenant,assertStorageAvailable} from './store.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 
 const HEX=/^#[0-9a-f]{6}$/i;
@@ -40,7 +40,7 @@ export async function brandingApi({endpoint,method,b,u,json,fail,audit}){
   if(b.remove){delete branding[kind];branding.version=(branding.version||0)+1;audit(u,`Removed the school ${kind}`);await save();json({ok:true,brand:publicBrand()});return true;}
   const raw=String(b.data||'').replace(/^data:[^,]*,/,'');if(!raw||raw.length>3_000_000)fail(400,'Choose an image under 2 MB.');
   const bytes=Buffer.from(raw,'base64');if(bytes.length>2*1024*1024)fail(400,'Choose an image under 2 MB.');
-  const image=validateFile(bytes,'lesson-image');
+  const image=validateFile(bytes,'lesson-image');assertStorageAvailable(image.bytes.length);
   const id=`brand-${kind}-${randomBytes(6).toString('hex')}`;
   const storage=await storeFile(tenantDir(),id,image.bytes,image.type,storagePrefix());
   branding[kind]={id,type:image.type,storage};branding.version=(branding.version||0)+1;audit(u,`Changed the school ${kind}`);await save();json({ok:true,brand:publicBrand()});return true;

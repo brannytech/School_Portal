@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 
-export async function openDatabase(directory,{schema}={}){
+export async function openDatabase(directory,{schema,migrate=true,file='school.sqlite'}={}){
  let sql;
  if(process.env.DATABASE_URL?.startsWith('postgres')){
   const {Client}=await import('pg');const client=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:true}:undefined});await client.connect();
@@ -10,9 +10,10 @@ export async function openDatabase(directory,{schema}={}){
   const query=(s,p=[])=>client.query(s.replace(/\?/g,()=>`$${++query.index}`),p);query.index=0;
   sql={kind:'postgresql',async all(s,p=[]){let i=0;return(await client.query(s.replace(/\?/g,()=>`$${++i}`),p)).rows;},async run(s,p=[]){let i=0;return client.query(s.replace(/\?/g,()=>`$${++i}`),p);},async exec(s){return client.query(s);},async close(){await client.end();}};
  }else{
-  const {DatabaseSync}=await import('node:sqlite');const handle=new DatabaseSync(path.join(directory,'school.sqlite'));handle.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+  const {DatabaseSync}=await import('node:sqlite');const handle=new DatabaseSync(path.join(directory,file));handle.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
   sql={kind:'sqlite',async all(s,p=[]){return handle.prepare(s).all(...p);},async run(s,p=[]){return handle.prepare(s).run(...p);},async exec(s){handle.exec(s);},async close(){handle.close();},handle};
  }
+ if(!migrate)return sql;
  await sql.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
  for(const file of fs.readdirSync(new URL('./migrations/',import.meta.url)).filter(v=>v.endsWith('.sql')).sort()){
   if((await sql.all('SELECT version FROM schema_migrations WHERE version=?',[file])).length)continue;

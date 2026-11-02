@@ -1,0 +1,12 @@
+node_modules
+.git
+data
+data-production
+test-results
+backups
+.env
+.env.*
+*.pdf
+*.png
+!public/**
+docs

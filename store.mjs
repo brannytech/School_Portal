@@ -124,7 +124,7 @@ export const uploadLinks=()=>currentTenant().uploadTokens;
 
 // ---- Platform-owner helpers. They return counts and health only, never people or records. ----
 const folderSize=d=>{let n=0;try{for(const e of fs.readdirSync(d,{withFileTypes:true}))n+=e.isDirectory()?folderSize(path.join(d,e.name)):fs.statSync(path.join(d,e.name)).size;}catch{}return n;};
-export const schoolList=()=>registry.schools.map(s=>{const t=tenants.get(s.code);return {code:s.code,name:t?.db.school.name||s.name||s.code,status:s.status||'ACTIVE',createdAt:s.createdAt,
+export const schoolList=()=>registry.schools.map(s=>{const t=tenants.get(s.code);return {code:s.code,limits:s.limits||{},name:t?.db.school.name||s.name||s.code,status:s.status||'ACTIVE',createdAt:s.createdAt,
  students:t?t.db.users.filter(u=>u.role==='STUDENT'&&u.status==='ACTIVE').length:null,teachers:t?t.db.users.filter(u=>u.role==='TEACHER'&&u.status==='ACTIVE').length:null,
  lastActivity:t?(t.db.audit.at(-1)?.at||null):null,storageBytes:t?folderSize(path.join(t.dir,'uploads')):null};});
 export async function setSchoolStatus(code,status){
@@ -141,3 +141,23 @@ export async function resetSchoolAdmin(code,password){
  await t.save();await t.sessions.revoke(admin.id);return admin.email;
 }
 export const platformDir=()=>rootDir;
+// ---- Per-school limits set by the platform owner (null means no limit). ----
+const entryOf=code=>registry.schools.find(s=>s.code===code);
+export const limitsOf=()=>entryOf(currentTenant().slug)?.limits||{};
+export async function setSchoolLimits(code,{students,storageMb}){
+ const entry=entryOf(code);if(!entry)throw Object.assign(Error('Unknown school.'),{status:404});
+ const num=v=>v===null||v===''||v===undefined?null:Number.isFinite(Number(v))&&Number(v)>0?Math.floor(Number(v)):NaN;
+ const limits={students:num(students),storageMb:num(storageMb)};if(Object.values(limits).some(Number.isNaN))throw Object.assign(Error('Limits must be positive numbers, or empty for no limit.'),{status:400});
+ entry.limits=limits;writeRegistry(registry);
+}
+export function assertCanAddStudent(){
+ const limit=limitsOf().students;if(!limit)return;
+ const count=db.users.filter(u=>u.role==='STUDENT'&&u.status!=='REMOVED').length;
+ if(count>=limit)throw Object.assign(Error(`This school has reached its limit of ${limit} students. Ask the platform owner to raise it.`),{status:403});
+}
+export function assertStorageAvailable(extraBytes=0){
+ const limit=limitsOf().storageMb;if(!limit)return;
+ if(folderSize(path.join(currentTenant().dir,'uploads'))+extraBytes>limit*1048576)throw Object.assign(Error('This school has used its file storage allowance. Ask the platform owner to raise it.'),{status:403});
+}
+export const schoolLimitsList=()=>Object.fromEntries(registry.schools.map(s=>[s.code,s.limits||{}]));
+export const schoolHandle=code=>{const t=tenants.get(code);return t?{sql:t.sql,dir:t.dir}:undefined;};

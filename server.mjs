@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
-import {db,save,hash,matches,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant} from './store.mjs';
+import {db,save,hash,matches,assertCanAddStudent,assertStorageAvailable,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant} from './store.mjs';
 import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
 import {studentApi} from './student-api.mjs';
@@ -60,6 +60,7 @@ async function handle(req,res){
  if(!['GET','HEAD'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Request origin not allowed.');
  const endpoint=url.pathname.slice(5);const method=req.method;
  let b={};if(['POST','PATCH','DELETE'].includes(method)){if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Expected JSON.');try{b=JSON.parse((await body(req)).toString()||'{}');}catch(e){if(e.status)throw e;fail(400,'Invalid JSON.');}}
+ if(endpoint==='health'&&method==='GET'){await sql.all('SELECT 1 AS ok');json({ok:true});return;}
  if(endpoint.startsWith('platform/')){await platformApi({endpoint,method,b,req,res,json,fail,rate});return;}
  const rawCookie=(req.headers.cookie||'').match(/(?:^|; )lab_session=([^;]+)/)?.[1]||'';
  const dot=rawCookie.indexOf('.'),cookieCode=dot>0?rawCookie.slice(0,dot):'',sid=dot>0?rawCookie.slice(dot+1):rawCookie;
@@ -85,7 +86,7 @@ async function handle(req,res){
  if(endpoint==='register'&&method==='POST'){
   if(!demo&&process.env.SELF_REGISTRATION!=='true')fail(403,'Ask your administrator for an invitation.');
   rate('register:'+req.socket.remoteAddress,8);const email=text(b.email,160).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Enter a valid email.');if(db.users.some(v=>v.email===email))fail(409,'This email is already registered.');if(!db.classes.includes(b.class))fail(400,'Choose a valid class.');if(String(b.password||'').length<10)fail(400,'Use at least 10 characters for your password.');
-  const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING',photoRequired:true});await save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
+  assertCanAddStudent();const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING',photoRequired:true});await save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
  }
  if(endpoint==='request-recovery'&&method==='POST'){rate('request-recovery:'+req.socket.remoteAddress,6);json(await requestRecovery(b));return;}
  if(endpoint==='recover-account'&&method==='POST'){rate('recover:'+req.socket.remoteAddress,8);json(await redeemRecovery(b,fail));return;}
@@ -161,7 +162,7 @@ async function handle(req,res){
   rate('upload:'+u.id,30);termAccess(u,c,s,t);const purpose=b.purpose;if(!['assignment','note','question','lesson-note','lesson-image','recording'].includes(purpose))fail(400,'Invalid upload purpose.');if(['lesson-note','lesson-image','recording'].includes(purpose)&&u.role==='STUDENT')fail(403,'Only teachers upload lesson notes.');const token=randomBytes(32).toString('hex');uploadTokens.set(token,{user:u.id,class:c,subject:s,term:t,purpose,expires:Date.now()+300000});json({url:`/api/upload/${token}`});return;
  }
  if(endpoint.startsWith('upload/')&&method==='PUT'){
-  const token=endpoint.split('/')[1],v=uploadTokens.get(token);if(!v||v.user!==u.id||v.expires<Date.now())fail(403,'Upload link expired. Try again.');termAccess(u,v.class,v.subject,v.term);const bytes=await body(req,v.purpose==='recording'?120*1024*1024:v.purpose==='lesson-image'?5*1024*1024:['assignment','lesson-note'].includes(v.purpose)?20*1024*1024:700*1024);const cleaned=validateFile(bytes,v.purpose);const id=randomUUID();const storage=await storeFile(tenantDir(),id,cleaned.bytes,cleaned.type,storagePrefix());db.files.push({id,student:u.id,class:v.class,subject:v.subject,term:v.term,purpose:v.purpose,sessionId:academicSession(),storage,type:cleaned.type,size:cleaned.bytes.length});uploadTokens.delete(token);await save();json({id});return;
+  const token=endpoint.split('/')[1],v=uploadTokens.get(token);if(!v||v.user!==u.id||v.expires<Date.now())fail(403,'Upload link expired. Try again.');termAccess(u,v.class,v.subject,v.term);const bytes=await body(req,v.purpose==='recording'?120*1024*1024:v.purpose==='lesson-image'?5*1024*1024:['assignment','lesson-note'].includes(v.purpose)?20*1024*1024:700*1024);const cleaned=validateFile(bytes,v.purpose);assertStorageAvailable(cleaned.bytes.length);const id=randomUUID();const storage=await storeFile(tenantDir(),id,cleaned.bytes,cleaned.type,storagePrefix());db.files.push({id,student:u.id,class:v.class,subject:v.subject,term:v.term,purpose:v.purpose,sessionId:academicSession(),storage,type:cleaned.type,size:cleaned.bytes.length});uploadTokens.delete(token);await save();json({id});return;
  }
  if(endpoint.startsWith('file/')&&method==='GET'){
   const id=endpoint.split('/')[1],f=db.files.find(v=>v.id===id);if(!f||!visibleFile(u,f))fail(404,'File not found.');const exp=url.searchParams.get('expires'),sig=url.searchParams.get('sig');if(!sig){const expires=Date.now()+120000;json({url:`/api/file/${id}?expires=${expires}&sessionId=${encodeURIComponent(f.sessionId)}&sig=${signed(`${id}:${u.id}:${expires}`)}`});return;}const expected=signed(`${id}:${u.id}:${exp}`);if(Number(exp)<Date.now()||sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))fail(403,'Image link expired.');await streamFile(tenantDir(),f,req,res,'no-store',storagePrefix());return;

@@ -721,7 +721,7 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 |---|---|---|
 | **1. Tenant isolation (done, branch `multi-school`)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
 | **2. School identity and platform owner (done, branch `school-identity`, PR #7)** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
-| **3. Hosting** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
+| **3. Hosting (done in code, branch `hosting-step3`, PR #8; staging still to do)** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
 | **4. Shared curriculum library** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
 | **5. Later** | Sub-domain per school, custom domain per school, plans and billing, school self-sign-up | Per feature |
 
@@ -799,6 +799,32 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 6. **Limits per school** (students, storage) enforced and visible on the owner screen.
 7. **Done when:** staging with two real schools, a restore of one school leaves the other untouched, and the isolation tests pass against Postgres and S3.
 **Estimate:** 5 working days.
+
+### 16.6c What step 3 delivered, and what remains
+**Delivered and verified**
+- Postgres schema per school **run for real** on Postgres 16 (the multi-school, school-identity, hosting and storage-prefix tests pass against it as well as on SQLite; `TEST_POSTGRES_URL=... npm test` repeats this anywhere).
+- Owner database moved to the `platform` schema when `DATABASE_URL` is set, so it survives host restarts.
+- `GET /api/health` (database check) and a `Dockerfile` with a health check; one image for every school.
+- Limits per school, set by the owner (students, file storage MB); a school at its limit gets a clear message; a school cannot raise its own limit.
+- `npm run school-backup -- backup|restore --code <school>`: one school's tables and local files; restore needs `--yes` and refuses another school's backup; tested to leave other schools untouched.
+- Per-school object-storage prefix tested (`schools/<code>/private/`; the first school keeps `private/`).
+- `DEPLOYMENT.md`: new section "Hosting many schools" (where to host, variables, container, limits, backup, verification).
+
+**Remaining (needs real accounts, so not done in the sandbox)**
+- Run a live **S3 bucket** test (store and read a file per school, cross-school read refused).
+- **Staging** on a chosen host with two real schools, HTTPS, `COOKIE_SECURE=true`, a rehearsed restore from a real Postgres backup.
+- Backup of files kept in S3 relies on bucket versioning or replication (documented).
+- Still open from step 2: delete school, consent-based support access, invitation emails.
+
+### 16.6d Step 4 in detail: shared curriculum library (next)
+1. **Library storage:** a platform-level store (the `platform` schema or a read-only folder of JSON in the code base) holding lesson and question templates by class, subject, term and week. Schools can only read it.
+2. **Owner tools:** the owner (or a curriculum editor role later) publishes a library version of SS1 Mathematics Term 1 Weeks 1 to 13 (start with the existing content in `curriculum.mjs`).
+3. **Copy into a school:** a school administrator or teacher chooses "Add from library", picks class, subject, term and weeks, and a **copy** is created in that school's own database as ordinary editable draft content. Nothing is shared afterwards.
+4. **Updates:** when the library publishes a new version, schools see "Newer version available" and can compare and choose to copy again as a new draft; their own edits are never overwritten.
+5. **Import path:** the same screen offers "Import my own lectures" (plan section 14) so a teacher can bring Word or text lectures instead.
+6. **Tests:** a copy is independent (editing it never changes the library or another school); a school cannot write to the library; a library version change does not alter published school content; isolation tests still pass.
+7. **Done when:** a new school imports SS1 Mathematics Week 1 to 13 in one action and edits its own copy.
+**Estimate:** 4 working days.
 
 ### 16.7 How 100 schools get onto the platform (no command line)
 The command in step 1 is a temporary tool. Onboarding happens in two stages.

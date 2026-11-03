@@ -836,7 +836,7 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 **Workflow for the owner:** write and release Week 1 onward in the pilot school; when a course is finished, export it, commit the file, deploy; other schools copy it and make their own edits.
 
 ### 16.6h What comes after the multi-school foundation
-Merge pull requests #4, #6, #7, #8 and #9 in order. Then the product work in this order: V3.0 quick wins (data weight), V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
+Merge pull requests #4, #6, #7, #8, #9 and #10 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
 
 ### 16.6e Hosting decision (2 November 2026)
 **One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.
@@ -963,3 +963,12 @@ Accessibility counts per screen (390 px): axe violations 0 on all 23 screens; co
 1. `DEMO_MODE=true node --experimental-sqlite server.mjs` with a fresh `DATA_DIR`.
 2. Use Playwright with Chromium at 390 × 844, record bytes with the Chrome DevTools Protocol (`Network.loadingFinished`), and run `axe-core` on each screen.
 3. Add the script to the repository as `scripts/audit-mobile.mjs` and run it in CI so the numbers in section 2.3 are checked on every change.
+
+
+## 18. V3.0 quick wins: status (PR #10)
+
+Delivered: crest and photo as small WebP (15 KB and 37 KB, replacing a 1.34 MB PNG and a 160 KB JPEG); ETag and 304 revalidation; brotli/gzip for text and JSON; crest and assets cached for a week; theme colour fixed; uploaded pictures shrunk in the browser (crest 192 px, photo 640 px) before upload; crest removed from the service-worker pre-cache (cache v35).
+
+Measured: login page about 1.74 MB before, about 122 KB on the wire now; repeat visits cost 304 responses only. Guarded by `tests/performance.test.mjs` (budget 130 KB). 115 tests pass.
+
+Not yet done: content-hashed filenames with immutable caching (needs a build step), role-based script splitting, KaTeX font subsetting, smaller `state` calls, cache-first service worker, data-saver mode, PNG/Apple icons.

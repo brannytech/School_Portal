@@ -49,6 +49,7 @@ const existing=await loadDatabase(sql);
 const file=path.join(dir,'database.json');
 const legacy=isDefault&&!existing&&fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
 let db=existing||legacy||(isDefault&&sampleMode()?seed():cleanSeed(admin));
+const startedClean=!existing&&!legacy&&!(isDefault&&sampleMode());
 const year=new Date().getFullYear()-(new Date().getMonth()<8?1:0);
 const sessionName=process.env.INITIAL_SESSION||year+'/'+(year+1);
 db.school??=isDefault?{id:'grace-field',name:name||'Grace-Field College, Ibadan',motto:'Raising young minds for future impact.'}:{id:slug,name:name||slug,motto:''};
@@ -81,7 +82,7 @@ if(process.env.NODE_ENV==='production'){
  db.appSecret=appSecretFor(slug);
 }
 await save();
-if(firstRun&&isDefault){const note=path.join(dir,'FIRST-LOGIN.txt');fs.writeFileSync(note,`First sign-in\nEmail:    ${firstRun.email}\nPassword: ${firstRun.password}\nYou will be asked to choose a new password immediately. This file is deleted afterwards.\n`,{mode:0o600});console.log(`\n=====================================================\n  FIRST RUN - administrator account created\n  Email:    ${firstRun.email}\n  Password: ${firstRun.password}\n  (temporary - you must change it at first sign-in)\n=====================================================\n`);}
+if(firstRun&&isDefault&&startedClean){const note=path.join(dir,'FIRST-LOGIN.txt');fs.writeFileSync(note,`First sign-in\nEmail:    ${firstRun.email}\nPassword: ${firstRun.password}\nYou will be asked to choose a new password immediately. This file is deleted afterwards.\n`,{mode:0o600});console.log(`\n=====================================================\n  FIRST RUN - administrator account created\n  Email:    ${firstRun.email}\n  Password: ${firstRun.password}\n  (temporary - you must change it at first sign-in)\n=====================================================\n`);}
 
 return {slug,dir,sql,get db(){return db;},save,sessions:durableSessions(sql),uploadTokens:new Map(),isDefault};
 

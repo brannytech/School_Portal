@@ -128,6 +128,7 @@ async function handle(req,res){
  if(await weeklyContentApi({endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}))return;
  if(await monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,termAccess,audit,json,fail}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
+ if(await libraryApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='state'&&method==='GET'){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
   const fits=v=>v.class===c&&v.subject===s&&v.term===t&&belongs(v);
@@ -181,7 +182,6 @@ async function handle(req,res){
  if(u.role!=='ADMIN')fail(403,'Admin access required.');
  if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);db.sessions.find(v=>v.id===academicSession()).currentTerm=db.currentTerm;audit(u,`Current term set to ${db.currentTerm}`);await save();json({ok:true});return;}
  if(await brandingApi({endpoint,method,b,u,json,fail,audit}))return;
- if(await libraryApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(belongs(v)&&v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({id:randomUUID(),teacher:b.teacher,class:c,subject:s,sessionId:academicSession()});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);await save();json({ok:true});return;}
  if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);await save();json({ok:true});return;}
  fail(404,'Endpoint not found.');

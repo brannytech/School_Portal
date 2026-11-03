@@ -2,17 +2,20 @@
 // The library is read-only code and data. A copy is an ordinary week in the school's own database,
 // locked to students until the teacher releases it. Editing the copy never changes the library or any other school.
 import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {db,save} from './store.mjs';
 import {academicSession,academicKey} from './context.mjs';
-import {curriculum} from './curriculum.mjs';
 
-const built=[{id:'ss1-mathematics-term1',title:'SS1 Mathematics, First Term',class:'SS1',subject:'Mathematics',term:1,version:1,weeks:curriculum}];
-// More items can be added as JSON files in library/ (same shape: id, title, class, subject, term, version, weeks).
+// The library ships EMPTY. Items are JSON files in the library folder (LIBRARY_DIR, default ./library) with the shape
+// {id, title, class, subject, term, version, weeks}. Create them from a finished course with `npm run library-export`.
+const libraryDir=()=>process.env.LIBRARY_DIR?pathToFileURL(path.resolve(process.env.LIBRARY_DIR)+path.sep):new URL('./library/',import.meta.url);
+const validItem=v=>v&&typeof v.id==='string'&&/^[a-z0-9-]{3,80}$/.test(v.id)&&typeof v.title==='string'&&Array.isArray(v.weeks)&&v.weeks.length>0&&v.weeks.every(w=>Number.isInteger(w.id)&&w.id>0&&typeof w.title==='string'&&Array.isArray(w.quiz)&&Array.isArray(w.lessons)&&w.lessons.every(l=>l&&typeof l.id==='string'&&Array.isArray(l.questions)));
 function folderItems(){
- const dir=new URL('./library/',import.meta.url);if(!fs.existsSync(dir))return [];
- return fs.readdirSync(dir).filter(f=>f.endsWith('.json')).flatMap(f=>{try{const v=JSON.parse(fs.readFileSync(new URL(f,dir),'utf8'));return v&&v.id&&Array.isArray(v.weeks)?[v]:[];}catch{return [];}});
+ const dir=libraryDir();if(!fs.existsSync(dir))return [];
+ return fs.readdirSync(dir).filter(f=>f.endsWith('.json')).flatMap(f=>{try{const v=JSON.parse(fs.readFileSync(new URL(f,dir),'utf8'));return validItem(v)?[v]:[];}catch{return [];}});
 }
-export const libraryItems=()=>{const seen=new Set();return [...built,...folderItems()].filter(i=>!seen.has(i.id)&&seen.add(i.id));};
+export const libraryItems=()=>{const seen=new Set();return folderItems().filter(i=>!seen.has(i.id)&&seen.add(i.id));};
 const summary=i=>({id:i.id,title:i.title,class:i.class,subject:i.subject,term:i.term,version:i.version||1,weeks:i.weeks.map(w=>({id:w.id,title:w.title,lessons:(w.lessons||[]).length}))});
 
 export async function libraryApi({endpoint,method,b,u,json,fail,audit}){

@@ -15,7 +15,7 @@ async function openLibrary(){
   <div class="field"><label for="lib-subject-${n}">Subject</label><select id="lib-subject-${n}" name="subject">${subjects.map(c=>`<option ${c===item.subject?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
   <div class="field"><label for="lib-term-${n}">Term</label><select id="lib-term-${n}" name="term">${[1,2,3].map(t=>`<option value="${t}" ${t===item.term?'selected':''}>Term ${t}</option>`).join('')}</select></div></div>
   ${item.copied.length?`<p class="small muted">Already copied from this item: weeks ${[...new Set(item.copied.map(c=>c.week))].join(', ')}.</p>`:''}
-  <div class="form-actions"><button class="primary" type="submit">Copy selected weeks</button></div><p class="small" role="status" data-library-message></p></form>`).join(''):'<p class="muted">The library is empty.</p>'}`);
+  <div class="form-actions"><button class="primary" type="submit">Copy selected weeks</button></div><p class="small" role="status" data-library-message></p></form>`).join(''):'<p class="muted">The library is empty for now. Ready-made lessons appear here when the platform owner adds them. You can still write your own in the Content Studio.</p>'}`);
 }
 document.addEventListener('click',e=>{if(e.target.closest('[data-action="library-open"]'))openLibrary();});
 document.addEventListener('submit',async e=>{

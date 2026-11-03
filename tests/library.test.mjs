@@ -4,8 +4,14 @@ import {spawn,spawnSync} from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 
+// A neutral fixture: the library ships empty, so the tests bring their own made-up item.
+function fixture(dir){
+ const lib=path.join(dir,'library');fs.mkdirSync(lib,{recursive:true});
+ const weeks=[1,2,3].map(n=>({id:n,title:'Sample week '+n,quiz:[],lessons:[{id:n+'-1',title:'Sample lesson '+n,order:1,questions:[]}]}));
+ fs.writeFileSync(path.join(lib,'sample-item.json'),JSON.stringify({id:'sample-item',title:'Sample item',class:'SS1',subject:'Mathematics',term:1,version:1,weeks}));return lib;
+}
 test('Library: a copy is independent, per school, permission-checked and never overwrites',()=>{
- const dir=path.resolve('test-results','library-'+Date.now());fs.mkdirSync(dir,{recursive:true});
+ const dir=path.resolve('test-results','library-'+Date.now());fs.mkdirSync(dir,{recursive:true});const lib=fixture(dir);
  const script=`
   const {db,createSchool,findSchool,DEFAULT_CODE}=await import('./store.mjs');
   const {requestScope}=await import('./context.mjs');
@@ -30,7 +36,7 @@ test('Library: a copy is independent, per school, permission-checked and never o
   r.betaCourses=Object.keys(findSchool('beta').db.courses||{}).length;
   r.listing=(await call(DEFAULT_CODE,admin,'library','GET')).out.items[0].copied.map(c=>c.week);
   console.log(JSON.stringify(r));process.exit(0);`;
- const run=spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','--input-type=module','-e',script],{env:{...process.env,DATA_DIR:dir,DATABASE_URL:'',NODE_ENV:'test',ADMIN_EMAIL:'h@main.test',ADMIN_PASSWORD:'Main-initial-password-1!'},encoding:'utf8'});
+ const run=spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','--input-type=module','-e',script],{env:{...process.env,DATA_DIR:dir,LIBRARY_DIR:lib,DATABASE_URL:'',NODE_ENV:'test',ADMIN_EMAIL:'h@main.test',ADMIN_PASSWORD:'Main-initial-password-1!'},encoding:'utf8'});
  assert.equal(run.status,0,run.stderr);const r=JSON.parse(run.stdout.trim().split('\n').pop());
  assert.equal(r.student,403,'students cannot use the library');
  assert.equal(r.stranger,403,'a teacher not assigned to the class and subject cannot copy');
@@ -41,4 +47,24 @@ test('Library: a copy is independent, per school, permission-checked and never o
  assert.equal(r.libraryAfterEdit,true,'editing a school copy never changes the library');
  assert.equal(r.betaCourses,0,'another school has nothing');
  assert.deepEqual(r.listing.sort(),[1,2,3]);
+});
+
+test('Library: ships empty, and export turns a school course into an item (leaving out weeks with school pictures)',()=>{
+ const dir=path.resolve('test-results','library-export-'+Date.now());fs.mkdirSync(dir,{recursive:true});
+ const env={...process.env,DATA_DIR:dir,DATABASE_URL:'',NODE_ENV:'test',LIBRARY_DIR:path.join(dir,'none'),ADMIN_EMAIL:'h@main.test',ADMIN_PASSWORD:'Main-initial-password-1!'};
+ const empty=spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','--input-type=module','-e',`const {libraryItems}=await import('./library.mjs');console.log(libraryItems().length);process.exit(0);`],{env:{...env,LIBRARY_DIR:''},encoding:'utf8'});
+ assert.equal(empty.stdout.trim(),'0','no ready-made curriculum is shipped');
+ const seed=`
+  const {db,save}=await import('./store.mjs');const key=db.currentSessionId+'|SS1:Mathematics:1';
+  db.files.push({id:'school-picture-1',student:'initial-admin',type:'image/png',storage:'local',class:'SS1',subject:'Mathematics',term:1,sessionId:db.currentSessionId});
+  db.courses[key]=[{id:1,title:'One',quiz:[],lessons:[{id:'1-1',title:'A',questions:[]}]},{id:2,title:'Two (has a picture)',quiz:[],lessons:[{id:'2-1',title:'B',body:'school-picture-1',questions:[]}]},{id:3,title:'Three',quiz:[],lessons:[{id:'3-1',title:'C',questions:[]}]}];
+  await save();process.exit(0);`;
+ assert.equal(spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','--input-type=module','-e',seed],{env,encoding:'utf8'}).status,0);
+ const out=path.join(dir,'out'),run=()=>spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','scripts/library-export.mjs','--code','main','--class','SS1','--subject','Mathematics','--term','1','--id','sample-export','--title','Sample export','--out',out],{env,encoding:'utf8'});
+ let r=run();assert.equal(r.status,0,r.stderr+r.stdout);
+ let item=JSON.parse(fs.readFileSync(path.join(out,'sample-export.json'),'utf8'));
+ assert.deepEqual(item.weeks.map(w=>w.id),[1,3],'the week with a school picture is left out');assert.equal(item.version,1);
+ r=run();assert.equal(r.status,0);item=JSON.parse(fs.readFileSync(path.join(out,'sample-export.json'),'utf8'));assert.equal(item.version,2,'exporting again raises the version');
+ const listed=spawnSync(process.execPath,['--experimental-sqlite','--no-warnings','--input-type=module','-e',`const {libraryItems}=await import('./library.mjs');console.log(JSON.stringify(libraryItems().map(i=>[i.id,i.version])));process.exit(0);`],{env:{...env,LIBRARY_DIR:out},encoding:'utf8'});
+ assert.deepEqual(JSON.parse(listed.stdout.trim()),[['sample-export',2]],'the library reads exported files');
 });

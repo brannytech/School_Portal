@@ -45,6 +45,10 @@ try{
  await page.screenshot({path:path.join(output,'admin-profile.png')});
  assert((await page.locator('.sidebar .school').innerText()).includes('Study very well'));check('Administrator edits the school profile and the sidebar updates');
 
+ // A large crest is shrunk in the browser before upload.
+ await page.evaluate(()=>new Promise(r=>{const c=document.createElement('canvas');c.width=c.height=1000;const g=c.getContext('2d');g.fillStyle='#a22';g.fillRect(0,0,1000,1000);c.toBlob(b=>{const dt=new DataTransfer();dt.items.add(new File([b],'big.png',{type:'image/png'}));const i=document.querySelector('[data-brand-file="crest"]');i.files=dt.files;i.dispatchEvent(new Event('change',{bubbles:true}));r();});}));
+ await page.locator('#school-profile-message',{hasText:'Image updated'}).waitFor();
+ const width=await page.evaluate(()=>new Promise(r=>{const i=new Image();i.onload=()=>r(i.naturalWidth);i.src=publicConfig.brand.crest;}));assert(width>0&&width<=192,'crest width '+width);check('A 1000 px crest is stored at '+width+' px');
  // Owner screen.
  const owner=await context.newPage();owner.on('pageerror',e=>pageErrors.push(e.message));await owner.goto(root+'/platform');
  await owner.locator('#login').waitFor();await owner.locator('#email').fill('owner@platform.test');await owner.locator('#password').fill('Owner-chosen-password-1!');await owner.locator('#login button').click();

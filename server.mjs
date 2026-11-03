@@ -1,7 +1,8 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
+import {randomBytes,randomUUID,createHmac,createHash,timingSafeEqual} from 'node:crypto';
+import zlib from 'node:zlib';
 import {db,save,hash,matches,assertCanAddStudent,assertStorageAvailable,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant} from './store.mjs';
 import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
@@ -12,6 +13,7 @@ import {recordStudentPresence} from './presence.mjs';
 import {adminDirectory} from './admin-directory.mjs';
 import {publicBrand,serveBrandImage,brandingApi} from './branding.mjs';
 import {platformApi} from './platform.mjs';
+import {libraryApi} from './library.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
@@ -44,17 +46,41 @@ const text=(v,max=5000)=>String(v??'').trim().slice(0,max);
 function needed(v,label){if(!v)fail(400,`${label} is required.`);return v;}
 function urlValue(v){try{const u=new URL(v);if(u.protocol!=='https:')throw Error();return u.href;}catch{fail(400,'Enter a full https:// link.');}}
 const rate=(key,limit)=>{const now=Date.now();const r=rates.get(key)||{n:0,until:now+60000};if(now>r.until){r.n=0;r.until=now+60000;}r.n++;rates.set(key,r);if(r.n>limit)fail(429,'Too many attempts. Please wait a minute.');};
+
+// Static files: validators (ETag, so repeat visits cost a few hundred bytes), brotli or gzip computed once per file, sensible cache lifetimes.
+const staticTypes={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.json':'application/json','.txt':'text/plain; charset=utf-8'};
+const compressible=new Set(['.html','.css','.js','.svg','.webmanifest','.json','.txt']);
+const staticCache=new Map();
+async function sendStatic(req,res,file){
+ const st=fs.statSync(file),ext=path.extname(file).toLowerCase();
+ let e=staticCache.get(file);
+ if(!e||e.mtimeMs!==st.mtimeMs||e.size!==st.size){e={mtimeMs:st.mtimeMs,size:st.size,etag:createHash('sha1').update(file+':'+st.mtimeMs+':'+st.size).digest('base64url').slice(0,22),variants:{}};staticCache.set(file,e);}
+ const accept=String(req.headers['accept-encoding']||''),encoding=compressible.has(ext)&&st.size>600?(/\bbr\b/.test(accept)?'br':/\bgzip\b/.test(accept)?'gzip':''):'';
+ const etag=`"${e.etag}${encoding?'-'+encoding:''}"`;
+ const rel=path.relative(publicDir,file).split(path.sep)[0];
+ const headers={'Content-Type':staticTypes[ext]||'application/octet-stream','ETag':etag,'Vary':'Accept-Encoding','Cache-Control':['vendor','assets'].includes(rel)&&ext!=='.js'&&ext!=='.css'?'public, max-age=604800':'no-cache'};
+ if(String(req.headers['if-none-match']||'').split(',').map(v=>v.trim().replace(/^W\//,'')).includes(etag)){res.writeHead(304,headers);res.end();return;}
+ let body;
+ if(encoding){if(!e.variants[encoding]){const raw=fs.readFileSync(file);e.variants[encoding]=encoding==='br'?zlib.brotliCompressSync(raw,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:9,[zlib.constants.BROTLI_PARAM_SIZE_HINT]:raw.length}}):zlib.gzipSync(raw,{level:9});}body=e.variants[encoding];headers['Content-Encoding']=encoding;headers['Content-Length']=body.length;}
+ else headers['Content-Length']=st.size;
+ res.writeHead(200,headers);
+ if(req.method==='HEAD'){res.end();return;}
+ if(body)res.end(body);else fs.createReadStream(file).pipe(res);
+}
 async function handle(req,res){
  const url=new URL(req.url,'http://localhost');let session;
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
- function json(value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
+ function json(value,status=200){
+  const body=Buffer.from(JSON.stringify(value)),headers={'Content-Type':'application/json','Cache-Control':'no-store'};
+  // Compress larger answers, but never ones that carry the session's CSRF token (compression side channels).
+  if(body.length>1024&&/\bgzip\b/.test(String(req.headers['accept-encoding']||''))&&!(value&&typeof value==='object'&&'csrf' in value)){const z=zlib.gzipSync(body,{level:6});res.writeHead(status,{...headers,'Content-Encoding':'gzip','Vary':'Accept-Encoding','Content-Length':z.length});res.end(z);return;}
+  res.writeHead(status,{...headers,'Content-Length':body.length});res.end(body);}
  try{
  if(!url.pathname.startsWith('/api/')){
   if(!['GET','HEAD'].includes(req.method))fail(405,'Method not allowed.');
   const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname==='/platform'?'/platform.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
-  const types={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
-  res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-cache'});if(req.method==='HEAD')res.end();else fs.createReadStream(file).pipe(res);return;
+  await sendStatic(req,res,file);return;
  }
  res.setHeader('Cache-Control','no-store');
  if(!['GET','HEAD'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Request origin not allowed.');
@@ -127,6 +153,7 @@ async function handle(req,res){
  if(await weeklyContentApi({endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}))return;
  if(await monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,termAccess,audit,json,fail}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
+ if(await libraryApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='state'&&method==='GET'){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
   const fits=v=>v.class===c&&v.subject===s&&v.term===t&&belongs(v);

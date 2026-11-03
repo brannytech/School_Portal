@@ -125,3 +125,11 @@ A backup holds one school's tables and its local uploads. It restores only into 
 
 ### Verifying against Postgres
 `TEST_POSTGRES_URL=postgres://user@host:5432/postgres npm test` runs the multi-school, school-identity and hosting tests against a real Postgres (each test creates and drops its own database).
+
+### The curriculum library (ships empty)
+The platform contains **no ready-made lessons**: the Content Studio starts blank and each school writes its own. Teachers and administrators see "Add from library" and the library is empty until the owner adds items.
+To share a finished course with other schools: write and release it in a school (for example your pilot school), stop the app, then run
+```
+npm run library-export -- --code main --class SS1 --subject Mathematics --term 1 --id ss1-mathematics-term1 --title "SS1 Mathematics, First Term"
+```
+This writes `library/<id>.json` (weeks that use pictures uploaded to that school are left out, because the pictures belong to the school). Commit the file and deploy. Exporting the same id again raises its version, and schools see "newer version available". A school that copies a week gets its own independent, editable copy that stays locked to students until the teacher releases it; existing weeks are never replaced. `LIBRARY_DIR` can point at another folder.

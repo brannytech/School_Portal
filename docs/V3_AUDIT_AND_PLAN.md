@@ -722,7 +722,7 @@ Trade-offs accepted: memory use grows with the number of active schools (each sc
 | **1. Tenant isolation (done, branch `multi-school`)** | School registry; per-school database and uploads; per-request routing; school code at sign-in; `create-school` command; isolation tests | Automated tests show a user of one school cannot sign in to, read, list, download or change another school's data, including by guessing ids and by swapping the cookie |
 | **2. School identity and platform owner (done, branch `school-identity`, PR #7)** | Per-school settings (logo, building photo, colours, name, motto, report header); platform-owner role and screen (create, suspend, reopen a school; reset a school admin's password); school branding on sign-in after the code is entered | A new school is created from the screen and shows its own branding |
 | **3. Hosting (done in code, branch `hosting-step3`, PR #8; staging still to do)** | Postgres schema per school; S3 prefix per school; backup and restore per school; health check; limits per school (storage, students) | Staging with two real schools; restore of one school does not touch the other |
-| **4. Shared curriculum library** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
+| **4. Shared curriculum library (done, branch `curriculum-library`, PR #9; ships empty)** | Platform-level lesson and question templates that a school copies and edits | A school imports Week 1 to 13 Mathematics in one click and edits its copy; edits never change the library or other schools |
 | **5. Later** | Sub-domain per school, custom domain per school, plans and billing, school self-sign-up | Per feature |
 
 ### 16.4a What step 1 delivered
@@ -825,6 +825,18 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 6. **Tests:** a copy is independent (editing it never changes the library or another school); a school cannot write to the library; a library version change does not alter published school content; isolation tests still pass.
 7. **Done when:** a new school imports SS1 Mathematics Week 1 to 13 in one action and edits its own copy.
 **Estimate:** 4 working days.
+
+### 16.6g What step 4 delivered (3 November 2026)
+**Owner decision:** the platform ships **no ready-made lessons**. The Content Studio starts blank and the owner enters the curriculum by hand. The earlier library item built from the old demo curriculum was removed.
+- "Add from library" for teachers and administrators. It is empty until items exist. A copy is independent, editable, locked to students until released, and never replaces an existing week; a teacher can copy only into a class and subject they teach.
+- Items are JSON files in `library/` (or `LIBRARY_DIR`), validated before use (weeks need a title, lessons and a quiz list) so a bad file cannot break a school's saving.
+- `npm run library-export` turns a finished course in one school into an item. Weeks that use pictures uploaded to that school are left out. Exporting again raises the version; schools then see "newer version available".
+- Fixes found while building: the library route sat behind the admin-only gate, so teachers could not use it (browser check caught it); a bogus first-run banner appeared in sample mode.
+- Tests: `tests/library.test.mjs` (independent copies, permissions, empty by default, export and versions) and `scripts/verify-library.mjs`; 114 tests pass.
+**Workflow for the owner:** write and release Week 1 onward in the pilot school; when a course is finished, export it, commit the file, deploy; other schools copy it and make their own edits.
+
+### 16.6h What comes after the multi-school foundation
+Merge pull requests #4, #6, #7, #8 and #9 in order. Then the product work in this order: V3.0 quick wins (data weight), V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
 
 ### 16.6e Hosting decision (2 November 2026)
 **One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.

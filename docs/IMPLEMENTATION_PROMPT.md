@@ -15,7 +15,8 @@ You are continuing work on **Olawale's Lab**, a multi-school learning platform f
 - `main`: last released version (do not push to it).
 - `clean-platform-v2` (PR #4): clean-state platform, Lesson Studio v2, question images, late-work marking, small-window Studio, improved question import. Merge first.
 - `multi-school` (PR #6, stacked on #4): **step 1 done**: one database and uploads folder per school, requests routed per school, school code at sign-in, `npm run create-school`, isolation tests.
-- `school-identity` (PR #7, stacked on #6): **step 2 done**: per-school profile and branding (`branding.mjs`, `public/school-settings.js`), platform owner at `/platform` (`platform.mjs`, `public/platform.js`), tests `tests/school-identity.test.mjs` and `scripts/verify-school-identity.mjs`. Merge in order #4, #6, #7, #8.
+- `school-identity` (PR #7, stacked on #6): **step 2 done**: per-school profile and branding (`branding.mjs`, `public/school-settings.js`), platform owner at `/platform` (`platform.mjs`, `public/platform.js`), tests `tests/school-identity.test.mjs` and `scripts/verify-school-identity.mjs`. Merge in order #4, #6, #7, #8, #9.
+- `curriculum-library` (PR #9, stacked on #8): **step 4 done**: shared library that **ships empty** (owner decision: no ready-made lessons are written; the Studio starts blank), `library.mjs`, `public/library.js`, `npm run library-export`, tests `tests/library.test.mjs`, `scripts/verify-library.mjs`.
 - `hosting-step3` (PR #8, stacked on #7): **step 3 done in code**: owner database on Postgres, per-school limits, `/api/health`, `npm run school-backup`, `Dockerfile`, hosting guide in `DEPLOYMENT.md`, verified on a real Postgres 16 (`TEST_POSTGRES_URL`). Still to do: live S3 test and staging on a real host.
 - `audit-v3`: documentation only (the plan).
 Create each new piece of work on its **own branch from the newest merged work** and open one pull request per step. Never leave `main` or a merged branch broken.
@@ -40,7 +41,7 @@ Create each new piece of work on its **own branch from the newest merged work** 
 8. Never commit secrets, real student data or `test-results/`.
 
 ## 5. How to work
-- Install and build: `npm install`, `npm run build`. Tests: `npm test` (112 pass at the end of step 3). Browser checks need Playwright and Chromium; see the environment variables used in `scripts/*.mjs` (`PLAYWRIGHT_MODULE`, `AUDIT_BROWSER_PATH`) and run at least `npm run verify-studio-v2`, `verify-assignments`, `verify-questions`, `verify-studio-small` for anything touching those screens.
+- Install and build: `npm install`, `npm run build`. Tests: `npm test` (114 pass at the end of step 4). Browser checks need Playwright and Chromium; see the environment variables used in `scripts/*.mjs` (`PLAYWRIGHT_MODULE`, `AUDIT_BROWSER_PATH`) and run at least `npm run verify-studio-v2`, `verify-assignments`, `verify-questions`, `verify-studio-small` for anything touching those screens.
 - Bump the cache name in `public/sw.js` (`olawale-shell-vNN`) whenever any file in `public/` changes.
 - Write the test first for each rule you add; keep the whole suite green before every commit.
 - Small commits with clear messages; one pull request per step with a summary, how it was tested, and anything not done.
@@ -58,10 +59,10 @@ Create each new piece of work on its **own branch from the newest merged work** 
 ### Step 3: hosting (DONE in code, PR #8; remaining: live S3 test and staging; plan 16.6c)
 Long-running host (not Vercel Functions: the filesystem is read-only), managed Postgres with a schema per school (written in step 1 but **never run against a live Postgres**: test it first), S3-compatible storage with the per-school prefix, HTTPS, health check, per-school backup and restore (restoring one school must not touch another), per-school limits (storage, students). Staging with two real schools.
 
-### Step 4: shared curriculum library (NEXT; plan 16.6d)
+### Step 4: shared curriculum library (DONE, PR #9; ships empty; plan 16.6g). Never write curriculum content: the owner enters it by hand.
 Platform-level lesson and question templates (SS1 Mathematics Week 1 to 13 first). A school copies and edits its own copy; edits never change the library or other schools. Include the Lesson Studio import path (plan section 14) so teachers can also bring their own lectures.
 
-### Then, in this order (each its own branch and pull request)
+### Then, in this order (each its own branch and pull request; NEXT is item 1)
 1. **V3.0 quick wins** (data weight: image conversion, compression, ETag, cache headers, icons, remove crest from pre-cache).
 2. **V3.2m Support monitor** (section 12): evidence per topic, four support bands, class board, student profile, support plans, extension and reminder actions, active-time presence.
 3. **V3.2r Parent report** (section 13): school header from settings, per-subject analysis, strengths, weaknesses, editable comments, print and PDF, class bulk run, audit entry. Admin and form teacher see all subjects; subject teachers see their own.

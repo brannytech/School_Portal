@@ -1,4 +1,4 @@
-# Olawale’s Lab — Grace-Field College, Ibadan
+# Olawale’s Lab
 
 A working student-centred LMS with administrator approval, subject teachers, private work submission, interactive learning and assessment-based mastery. School motto: Raising young minds for future impact.
 

@@ -12,6 +12,7 @@ import {recordStudentPresence} from './presence.mjs';
 import {adminDirectory} from './admin-directory.mjs';
 import {publicBrand,serveBrandImage,brandingApi} from './branding.mjs';
 import {platformApi} from './platform.mjs';
+import {libraryApi} from './library.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
@@ -180,6 +181,7 @@ async function handle(req,res){
  if(u.role!=='ADMIN')fail(403,'Admin access required.');
  if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);db.sessions.find(v=>v.id===academicSession()).currentTerm=db.currentTerm;audit(u,`Current term set to ${db.currentTerm}`);await save();json({ok:true});return;}
  if(await brandingApi({endpoint,method,b,u,json,fail,audit}))return;
+ if(await libraryApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(belongs(v)&&v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({id:randomUUID(),teacher:b.teacher,class:c,subject:s,sessionId:academicSession()});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);await save();json({ok:true});return;}
  if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);await save();json({ok:true});return;}
  fail(404,'Endpoint not found.');

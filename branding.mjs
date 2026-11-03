@@ -14,7 +14,7 @@ const clean=(v,max)=>String(v??'').replace(/[\u0000-\u001f<>]/g,'').trim().slice
 export function publicBrand(){
  const b=db.branding||{},t=currentTenant(),url=k=>`/api/brand/${k}?school=${encodeURIComponent(t.slug)}&v=${b.version||0}`;
  return {code:t.slug,name:db.school.name,motto:db.school.motto||'',shortName:b.shortName||'',accent:b.accent||'',
-  crest:b.crest?url('crest'):(t.isDefault?'/assets/school-logo.png':null),photo:b.photo?url('photo'):(t.isDefault?'/assets/school-building.jpeg':null)};
+  crest:b.crest?url('crest'):(t.isDefault?'/assets/school-logo.webp':null),photo:b.photo?url('photo'):(t.isDefault?'/assets/school-building.webp':null)};
 }
 
 export async function serveBrandImage(kind,req,res,fail){

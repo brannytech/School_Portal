@@ -75,3 +75,12 @@ test('server validates new fields and students never receive answers',async()=>{
   assert.equal((await attempt('q3','3.3')).value.correct,false);
  }finally{server.kill();}
 });
+
+import {questionsFromCSV as importAny} from '../public/studio/questions.js';
+test('import accepts spreadsheet paste, semicolons, any header order and plain text',()=>{
+ const mk=()=>'x'+Math.random();
+ assert.equal(importAny('choice\tWhich is prime?\t4\t6\t7\t9\tC',{makeId:mk}).questions.length,1);
+ assert.equal(importAny('kind;prompt;A;B;C;D;answer\nchoice;P?;4;6;7;9;C',{makeId:mk}).questions.length,1);
+ assert.equal(importAny('Question,Type,A,B,C,D,Answer\nP?,MCQ,4,6,7,9,C\n2+2?,Number,,,,,4',{makeId:mk}).questions.length,2);
+ assert.equal(importAny('1. P?\nA. 4\nB. 6\nC. 7\nAnswer: C\n\n2. 2 is even.\nAnswer: true',{makeId:mk}).questions.length,2);
+});

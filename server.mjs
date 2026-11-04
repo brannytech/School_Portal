@@ -1,8 +1,9 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import {randomBytes,randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
-import {db,save,hash,matches,dataDir,sql} from './store.mjs';
+import {randomBytes,randomUUID,createHmac,createHash,timingSafeEqual} from 'node:crypto';
+import zlib from 'node:zlib';
+import {db,save,hash,matches,assertCanAddStudent,assertStorageAvailable,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant} from './store.mjs';
 import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
 import {studentApi} from './student-api.mjs';
@@ -10,25 +11,28 @@ import {monitoringApi} from './monitoring.mjs';
 import {weeklyContentApi,assignmentOpen,closingOpen,studentAssignment} from './weekly-content.mjs';
 import {recordStudentPresence} from './presence.mjs';
 import {adminDirectory} from './admin-directory.mjs';
+import {publicBrand,serveBrandImage,brandingApi} from './branding.mjs';
+import {platformApi} from './platform.mjs';
+import {libraryApi} from './library.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
-import {durableSessions} from './database.mjs';
 import {lmsApi,releaseState,notify,redeemRecovery,requestRecovery} from './lms-api.mjs';
 import {checkAnswer,gradeAssessment,masteryBand,calculate} from './dist/domain.js';
 import {summariseResults} from './dist/results.js';
 import {studentLesson,contentRevision} from './lesson-document.mjs';
 const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
-const sessions=durableSessions(sql),rates=new Map(),uploadTokens=new Map(),secret=db.appSecret;
+const sessions={get:(...a)=>sessionStore().get(...a),set:(...a)=>sessionStore().set(...a),delete:(...a)=>sessionStore().delete(...a),revoke:(...a)=>sessionStore().revoke(...a)},rates=new Map(),uploadTokens={get:k=>uploadLinks().get(k),set:(k,v)=>uploadLinks().set(k,v),delete:k=>uploadLinks().delete(k)};
+const cookieFor=id=>`lab_session=${currentTenant().slug}.${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==='true'?'; Secure':''}`;
 const demo=process.env.NODE_ENV!=='production'&&process.env.DEMO_MODE==='true';
 const scopeKey=(c,s,t,sid=academicSession()||db.currentSessionId)=>academicKey(c,s,t,sid);
 const classFor=(u,sid=academicSession()||db.currentSessionId)=>db.enrolments.find(e=>e.student===u.id&&e.sessionId===sid)?.class;
 const currentTerm=()=>db.sessions.find(s=>s.id===(academicSession()||db.currentSessionId))?.currentTerm||1;
 const belongs=v=>v.sessionId===(academicSession()||db.currentSessionId);
 
-const publicDir=path.resolve('public');fs.mkdirSync(path.join(dataDir,'uploads'),{recursive:true});
+const publicDir=path.resolve('public');
 const safeUser=u=>{const {password,guardian,...rest}=u;return rest;};
 const fail=(s,m)=>{throw Object.assign(new Error(m),{status:s});};
-const signed=value=>createHmac('sha256',secret).update(value).digest('hex');
+const signed=value=>createHmac('sha256',db.appSecret).update(value).digest('hex');
 function scoped(u,c,s,sid=academicSession()||db.currentSessionId){return u.role==='ADMIN'||(u.role==='STUDENT'?classFor(u,sid)===c:db.allocations.some(a=>a.teacher===u.id&&a.class===c&&a.subject===s&&a.sessionId===sid));}
 function course(c,s,t){return (db.courses?.[scopeKey(c,s,t)]||[]).map(w=>({...w,lessons:[...w.lessons].sort((a,b)=>(a.order||a.day||0)-(b.order||b.day||0))}));}
 function scope(u,c,s){if(!scoped(u,c,s))fail(403,'This class or subject is not assigned to you.');}
@@ -42,34 +46,73 @@ const text=(v,max=5000)=>String(v??'').trim().slice(0,max);
 function needed(v,label){if(!v)fail(400,`${label} is required.`);return v;}
 function urlValue(v){try{const u=new URL(v);if(u.protocol!=='https:')throw Error();return u.href;}catch{fail(400,'Enter a full https:// link.');}}
 const rate=(key,limit)=>{const now=Date.now();const r=rates.get(key)||{n:0,until:now+60000};if(now>r.until){r.n=0;r.until=now+60000;}r.n++;rates.set(key,r);if(r.n>limit)fail(429,'Too many attempts. Please wait a minute.');};
+
+// Static files: validators (ETag, so repeat visits cost a few hundred bytes), brotli or gzip computed once per file, sensible cache lifetimes.
+const staticTypes={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.json':'application/json','.txt':'text/plain; charset=utf-8'};
+const compressible=new Set(['.html','.css','.js','.svg','.webmanifest','.json','.txt']);
+const staticCache=new Map();
+async function sendStatic(req,res,file){
+ const st=fs.statSync(file),ext=path.extname(file).toLowerCase();
+ let e=staticCache.get(file);
+ if(!e||e.mtimeMs!==st.mtimeMs||e.size!==st.size){e={mtimeMs:st.mtimeMs,size:st.size,etag:createHash('sha1').update(file+':'+st.mtimeMs+':'+st.size).digest('base64url').slice(0,22),variants:{}};staticCache.set(file,e);}
+ const accept=String(req.headers['accept-encoding']||''),encoding=compressible.has(ext)&&st.size>600?(/\bbr\b/.test(accept)?'br':/\bgzip\b/.test(accept)?'gzip':''):'';
+ const etag=`"${e.etag}${encoding?'-'+encoding:''}"`;
+ const rel=path.relative(publicDir,file).split(path.sep)[0];
+ const headers={'Content-Type':staticTypes[ext]||'application/octet-stream','ETag':etag,'Vary':'Accept-Encoding','Cache-Control':['vendor','assets'].includes(rel)&&ext!=='.js'&&ext!=='.css'?'public, max-age=604800':'no-cache'};
+ if(String(req.headers['if-none-match']||'').split(',').map(v=>v.trim().replace(/^W\//,'')).includes(etag)){res.writeHead(304,headers);res.end();return;}
+ let body;
+ if(encoding){if(!e.variants[encoding]){const raw=fs.readFileSync(file);e.variants[encoding]=encoding==='br'?zlib.brotliCompressSync(raw,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:9,[zlib.constants.BROTLI_PARAM_SIZE_HINT]:raw.length}}):zlib.gzipSync(raw,{level:9});}body=e.variants[encoding];headers['Content-Encoding']=encoding;headers['Content-Length']=body.length;}
+ else headers['Content-Length']=st.size;
+ res.writeHead(200,headers);
+ if(req.method==='HEAD'){res.end();return;}
+ if(body)res.end(body);else fs.createReadStream(file).pipe(res);
+}
 async function handle(req,res){
  const url=new URL(req.url,'http://localhost');let session;
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
- function json(value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
+ function json(value,status=200){
+  const body=Buffer.from(JSON.stringify(value)),headers={'Content-Type':'application/json','Cache-Control':'no-store'};
+  // Compress larger answers, but never ones that carry the session's CSRF token (compression side channels).
+  if(body.length>1024&&/\bgzip\b/.test(String(req.headers['accept-encoding']||''))&&!(value&&typeof value==='object'&&'csrf' in value)){const z=zlib.gzipSync(body,{level:6});res.writeHead(status,{...headers,'Content-Encoding':'gzip','Vary':'Accept-Encoding','Content-Length':z.length});res.end(z);return;}
+  res.writeHead(status,{...headers,'Content-Length':body.length});res.end(body);}
  try{
  if(!url.pathname.startsWith('/api/')){
   if(!['GET','HEAD'].includes(req.method))fail(405,'Method not allowed.');
-  const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
-  const types={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
-  res.writeHead(200,{'Content-Type':types[path.extname(file)]||'application/octet-stream','Cache-Control':'no-cache'});if(req.method==='HEAD')res.end();else fs.createReadStream(file).pipe(res);return;
+  const file=path.resolve(publicDir,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname==='/platform'?'/platform.html':url.pathname));if(!file.startsWith(publicDir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory())fail(404,'Page not found.');
+  await sendStatic(req,res,file);return;
  }
  res.setHeader('Cache-Control','no-store');
  if(!['GET','HEAD'].includes(req.method)&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Request origin not allowed.');
- const sid=(req.headers.cookie||'').match(/(?:^|; )lab_session=([^;]+)/)?.[1];session=await sessions.get(sid);
- if(session&&session.expires<Date.now()){await sessions.delete(sid);session=null;}
- let u=session&&db.users.find(v=>v.id===session.user&&v.status==='ACTIVE');
  const endpoint=url.pathname.slice(5);const method=req.method;
  let b={};if(['POST','PATCH','DELETE'].includes(method)){if(!String(req.headers['content-type']||'').startsWith('application/json'))fail(415,'Expected JSON.');try{b=JSON.parse((await body(req)).toString()||'{}');}catch(e){if(e.status)throw e;fail(400,'Invalid JSON.');}}
- if(endpoint==='config'&&method==='GET'){json({demo,school:db.school,selfRegistration:demo||process.env.SELF_REGISTRATION==='true'});return;}
+ if(endpoint==='health'&&method==='GET'){await sql.all('SELECT 1 AS ok');json({ok:true});return;}
+ if(endpoint.startsWith('platform/')){await platformApi({endpoint,method,b,req,res,json,fail,rate});return;}
+ const rawCookie=(req.headers.cookie||'').match(/(?:^|; )lab_session=([^;]+)/)?.[1]||'';
+ const dot=rawCookie.indexOf('.'),cookieCode=dot>0?rawCookie.slice(0,dot):'',sid=dot>0?rawCookie.slice(dot+1):rawCookie;
+ // Which school is this request for? Sign-in style requests name it (school code); everything else follows the signed-in cookie.
+ const naming=(['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)&&method==='POST')?text(b.school,40).toLowerCase():(endpoint==='config'||endpoint.startsWith('brand/'))?text(url.searchParams.get('school')||'',40).toLowerCase():'';
+ if(naming)rate('school-code:'+req.socket.remoteAddress,40);
+ const tenant=naming?findSchool(naming):cookieCode?findSchool(cookieCode):onlySchool();
+ if(naming&&!tenant)fail(404,'School code not recognised. Check it with your school.');
+ if(!tenant){
+  if(endpoint==='config'&&method==='GET'){json({demo,school:null,brand:null,multi:true,selfRegistration:false});return;}
+  fail(['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)?400:401,['login','demo-login','register','request-recovery','recover-account'].includes(endpoint)?'Enter your school code.':'Please sign in to continue.');
+ }
+ const reqScope=requestScope.getStore();reqScope.tenant=tenant;reqScope.sessionId=tenant.db.currentSessionId;
+ session=await sessions.get(sid);
+ if(session&&session.expires<Date.now()){await sessions.delete(sid);session=null;}
+ let u=session&&db.users.find(v=>v.id===session.user&&v.status==='ACTIVE');
+ if(endpoint==='config'&&method==='GET'){json({demo,school:db.school,brand:publicBrand(),multi:schoolCount()>1,selfRegistration:demo||process.env.SELF_REGISTRATION==='true'});return;}
+ if(endpoint.startsWith('brand/')&&method==='GET'){await serveBrandImage(endpoint.slice(6),req,res,fail);return;}
  if((endpoint==='login'||endpoint==='demo-login')&&method==='POST'){
   rate('login:'+req.socket.remoteAddress,15);const user=endpoint==='demo-login'&&demo?db.users.find(v=>v.id===text(b.role).toLowerCase()):db.users.find(v=>v.email.toLowerCase()===text(b.email).toLowerCase());if(endpoint==='demo-login'&&!demo)fail(404,'Not found.');if(!user||(endpoint!=='demo-login'&&!matches(String(b.password||''),user.password)))fail(401,'Email or password is incorrect.');if(user.status!=='ACTIVE')fail(403,user.status==='PENDING'?'Your account is awaiting admin approval.':`Your account is ${user.status.toLowerCase()}. Contact the school administrator.`);
-  if(sid)await sessions.delete(sid);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');await sessions.set(id,{user:user.id,csrf,expires:Date.now()+8*3600000});res.setHeader('Set-Cookie',`lab_session=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==='true'?'; Secure':''}`);await recordStudentPresence(user);json({user:safeUser(user),csrf});return;
+  if(sid)await sessions.delete(sid);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');await sessions.set(id,{user:user.id,csrf,expires:Date.now()+8*3600000});res.setHeader('Set-Cookie',cookieFor(id));await recordStudentPresence(user);json({user:safeUser(user),csrf});return;
  }
  if(endpoint==='register'&&method==='POST'){
   if(!demo&&process.env.SELF_REGISTRATION!=='true')fail(403,'Ask your administrator for an invitation.');
   rate('register:'+req.socket.remoteAddress,8);const email=text(b.email,160).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail(400,'Enter a valid email.');if(db.users.some(v=>v.email===email))fail(409,'This email is already registered.');if(!db.classes.includes(b.class))fail(400,'Choose a valid class.');if(String(b.password||'').length<10)fail(400,'Use at least 10 characters for your password.');
-  const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING',photoRequired:true});await save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
+  assertCanAddStudent();const admission=needed(text(b.admission,80),'Admission number');if(db.users.some(v=>v.admission===admission))fail(409,'This admission number is already registered.');db.users.push({id:randomUUID(),name:needed(text(b.name,100),'Name'),email,password:hash(b.password),class:b.class,admission,guardian:needed(text(b.guardian,40),'Guardian phone'),role:'STUDENT',status:'PENDING',photoRequired:true});await save();json({message:'Registration received. Your account is awaiting admin approval.'},201);return;
  }
  if(endpoint==='request-recovery'&&method==='POST'){rate('request-recovery:'+req.socket.remoteAddress,6);json(await requestRecovery(b));return;}
  if(endpoint==='recover-account'&&method==='POST'){rate('recover:'+req.socket.remoteAddress,8);json(await redeemRecovery(b,fail));return;}
@@ -79,7 +122,7 @@ async function handle(req,res){
   const id=decodeURIComponent(endpoint.slice(6)),f=db.files.find(v=>v.id===id&&v.purpose==='lesson-image');if(!f)fail(404,'Image not found.');
   requestScope.getStore().sessionId=f.sessionId;if(!scoped(u,f.class,f.subject,f.sessionId))fail(404,'Image not found.');
   if(u.role==='STUDENT'){const inAssignment=db.assignments.some(a=>a.class===f.class&&a.subject===f.subject&&a.sessionId===f.sessionId&&a.term<=currentTerm()&&JSON.stringify([a.document?.blocks||[],a.questions||[]]).includes(id)&&!db.termLocks.includes(scopeKey(a.class,a.subject,a.term))&&assignmentOpen(a,course,releaseState,scopeKey));const used=inAssignment||[1,2,3].some(t=>t<=currentTerm()&&!db.termLocks.includes(scopeKey(f.class,f.subject,t))&&course(f.class,f.subject,t).some(w=>w.lessons.some(l=>releaseState(f.class,f.subject,t,l.id,scopeKey).available&&JSON.stringify([l.document?.blocks||[],l.questions||[]]).includes(id))||w.lessons.some(l=>releaseState(f.class,f.subject,t,l.id,scopeKey).available)&&JSON.stringify(w.quiz||[]).includes(id)));if(!used)fail(404,'Image not found.');}
-  await streamFile(dataDir,f,req,res,'private, no-cache');return;
+  await streamFile(tenantDir(),f,req,res,'private, no-cache',storagePrefix());return;
  }
  const chosen=text(b.sessionId||url.searchParams.get('sessionId')||db.currentSessionId);if(!db.sessions.some(s=>s.id===chosen))fail(400,'Unknown academic session.');requestScope.getStore().sessionId=chosen;
  if(u.role==='STUDENT'){const enrolled=classFor(u);if(!enrolled)fail(403,'You are not enrolled in this academic session.');u={...u,class:enrolled};}
@@ -95,8 +138,8 @@ async function handle(req,res){
   const wasInitialAdmin=u.role==='ADMIN'&&!!u.mustChangePassword;
   const account=db.users.find(v=>v.id===u.id);account.password=hash(next);delete account.mustChangePassword;audit(u,'Changed account password');await save();
   await sessions.revoke(u.id);const id=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');await sessions.set(id,{user:u.id,csrf,expires:Date.now()+8*3600000});
-  res.setHeader('Set-Cookie',`lab_session=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==='true'?'; Secure':''}`);
-  if(wasInitialAdmin){try{fs.unlinkSync(path.join(dataDir,'FIRST-LOGIN.txt'));}catch{}}
+  res.setHeader('Set-Cookie',cookieFor(id));
+  if(wasInitialAdmin){try{fs.unlinkSync(path.join(tenantDir(),'FIRST-LOGIN.txt'));}catch{}}
   json({user:safeUser(account),csrf});return;
  }
  if(endpoint==='logout'&&method==='POST'){await sessions.delete(sid);res.setHeader('Set-Cookie','lab_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');json({ok:true});return;}
@@ -110,6 +153,7 @@ async function handle(req,res){
  if(await weeklyContentApi({endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}))return;
  if(await monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,releaseState,scopeKey,lessonAccess,termAccess,audit,json,fail}))return;
  if(await lmsApi({endpoint,method,b,u,c,s,t,json,fail,scope,termAccess,lessonAccess,course,scopeKey,sessions,audit}))return;
+ if(await libraryApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='state'&&method==='GET'){
   scope(u,c,s);const locked=u.role==='STUDENT'&&(t>currentTerm()||db.termLocks.includes(scopeKey(c,s,t)));
   const fits=v=>v.class===c&&v.subject===s&&v.term===t&&belongs(v);
@@ -145,10 +189,10 @@ async function handle(req,res){
   rate('upload:'+u.id,30);termAccess(u,c,s,t);const purpose=b.purpose;if(!['assignment','note','question','lesson-note','lesson-image','recording'].includes(purpose))fail(400,'Invalid upload purpose.');if(['lesson-note','lesson-image','recording'].includes(purpose)&&u.role==='STUDENT')fail(403,'Only teachers upload lesson notes.');const token=randomBytes(32).toString('hex');uploadTokens.set(token,{user:u.id,class:c,subject:s,term:t,purpose,expires:Date.now()+300000});json({url:`/api/upload/${token}`});return;
  }
  if(endpoint.startsWith('upload/')&&method==='PUT'){
-  const token=endpoint.split('/')[1],v=uploadTokens.get(token);if(!v||v.user!==u.id||v.expires<Date.now())fail(403,'Upload link expired. Try again.');termAccess(u,v.class,v.subject,v.term);const bytes=await body(req,v.purpose==='recording'?120*1024*1024:v.purpose==='lesson-image'?5*1024*1024:['assignment','lesson-note'].includes(v.purpose)?20*1024*1024:700*1024);const cleaned=validateFile(bytes,v.purpose);const id=randomUUID();const storage=await storeFile(dataDir,id,cleaned.bytes,cleaned.type);db.files.push({id,student:u.id,class:v.class,subject:v.subject,term:v.term,purpose:v.purpose,sessionId:academicSession(),storage,type:cleaned.type,size:cleaned.bytes.length});uploadTokens.delete(token);await save();json({id});return;
+  const token=endpoint.split('/')[1],v=uploadTokens.get(token);if(!v||v.user!==u.id||v.expires<Date.now())fail(403,'Upload link expired. Try again.');termAccess(u,v.class,v.subject,v.term);const bytes=await body(req,v.purpose==='recording'?120*1024*1024:v.purpose==='lesson-image'?5*1024*1024:['assignment','lesson-note'].includes(v.purpose)?20*1024*1024:700*1024);const cleaned=validateFile(bytes,v.purpose);assertStorageAvailable(cleaned.bytes.length);const id=randomUUID();const storage=await storeFile(tenantDir(),id,cleaned.bytes,cleaned.type,storagePrefix());db.files.push({id,student:u.id,class:v.class,subject:v.subject,term:v.term,purpose:v.purpose,sessionId:academicSession(),storage,type:cleaned.type,size:cleaned.bytes.length});uploadTokens.delete(token);await save();json({id});return;
  }
  if(endpoint.startsWith('file/')&&method==='GET'){
-  const id=endpoint.split('/')[1],f=db.files.find(v=>v.id===id);if(!f||!visibleFile(u,f))fail(404,'File not found.');const exp=url.searchParams.get('expires'),sig=url.searchParams.get('sig');if(!sig){const expires=Date.now()+120000;json({url:`/api/file/${id}?expires=${expires}&sessionId=${encodeURIComponent(f.sessionId)}&sig=${signed(`${id}:${u.id}:${expires}`)}`});return;}const expected=signed(`${id}:${u.id}:${exp}`);if(Number(exp)<Date.now()||sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))fail(403,'Image link expired.');await streamFile(dataDir,f,req,res);return;
+  const id=endpoint.split('/')[1],f=db.files.find(v=>v.id===id);if(!f||!visibleFile(u,f))fail(404,'File not found.');const exp=url.searchParams.get('expires'),sig=url.searchParams.get('sig');if(!sig){const expires=Date.now()+120000;json({url:`/api/file/${id}?expires=${expires}&sessionId=${encodeURIComponent(f.sessionId)}&sig=${signed(`${id}:${u.id}:${expires}`)}`});return;}const expected=signed(`${id}:${u.id}:${exp}`);if(Number(exp)<Date.now()||sig.length!==expected.length||!timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))fail(403,'Image link expired.');await streamFile(tenantDir(),f,req,res,'no-store',storagePrefix());return;
  }
  // Every management mutation is checked here before any record is changed.
  if(u.role==='STUDENT')fail(403,'Teacher or administrator access required.');
@@ -162,12 +206,13 @@ async function handle(req,res){
  if(endpoint==='reflection-reply'&&method==='POST'){const r=db.reflections.find(v=>v.id===b.id);if(!r)fail(404,'Reflection not found.');scope(u,r.class,r.subject);r.reply=needed(text(b.text),'Feedback');await save();json(r);return;}
  if(u.role!=='ADMIN')fail(403,'Admin access required.');
  if(endpoint==='current-term'&&method==='POST'){if(![1,2,3].includes(Number(b.currentTerm)))fail(400,'Invalid term.');db.currentTerm=Number(b.currentTerm);db.sessions.find(v=>v.id===academicSession()).currentTerm=db.currentTerm;audit(u,`Current term set to ${db.currentTerm}`);await save();json({ok:true});return;}
+ if(await brandingApi({endpoint,method,b,u,json,fail,audit}))return;
  if(endpoint==='allocation'&&method==='POST'){if(!db.users.some(v=>v.id===b.teacher&&v.role==='TEACHER'))fail(400,'Choose a teacher.');if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Invalid class or subject.');db.allocations=db.allocations.filter(v=>!(belongs(v)&&v.teacher===b.teacher&&v.class===c&&v.subject===s));if(!b.remove)db.allocations.push({id:randomUUID(),teacher:b.teacher,class:c,subject:s,sessionId:academicSession()});audit(u,`${b.remove?'Removed':'Assigned'} teacher ${b.teacher}: ${c} ${s}`);await save();json({ok:true});return;}
  if(endpoint==='catalog'&&method==='POST'){const list=b.kind==='class'?db.classes:db.subjects;const name=needed(text(b.name,80),'Name');if(!list.includes(name))list.push(name);audit(u,`Added ${b.kind}: ${name}`);await save();json({ok:true});return;}
  fail(404,'Endpoint not found.');
  }catch(e){if(!res.headersSent)json({error:e.status?e.message:'An unexpected error occurred. Please try again.'},e.status||500);else res.end();if(!e.status)console.error(e);}
 }
 let requestTail=Promise.resolve();
-const server=http.createServer((req,res)=>{requestTail=requestTail.then(()=>requestScope.run({sessionId:db.currentSessionId},()=>handle(req,res))).catch(e=>{console.error('Request failed:',e.message);if(!res.headersSent)res.writeHead(500);res.end();});});
+const server=http.createServer((req,res)=>{requestTail=requestTail.then(()=>requestScope.run({},()=>handle(req,res))).catch(e=>{console.error('Request failed:',e.message);if(!res.headersSent)res.writeHead(500);res.end();});});
 server.on('error',e=>{if(e.code==='EADDRINUSE'){console.error(`Port ${port} is already in use (another copy of this app or another program).\nChoose another port: set PORT=3001 in your .env or .env.production file, or stop the program using port ${port}.`);process.exit(1);}throw e;});
 server.listen(port,host,()=>console.log(`Olawale's Lab is ready at http://${host}:${server.address().port}`));

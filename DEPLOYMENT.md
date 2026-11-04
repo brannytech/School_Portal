@@ -84,3 +84,52 @@ The restore command refuses to overwrite a database with existing users. It rest
 ## Release gates
 
 `npm run build`, `npm test`, and `npm run verify-math` must pass. Then verify the actual PostgreSQL/storage deployment, HTTPS, device camera/file-picker behaviour, mobile keyboard access, PWA installation, backups and a complete student → teacher → student marking cycle with fictional staging accounts. No production student records are used in automated tests. Do not label the deployment production-ready before these external gates pass.
+
+## Hosting many schools (multi-school platform)
+
+One installation serves many schools. Each school has its own data (its own database or Postgres schema, and its own uploads folder or object-storage prefix); the school is chosen by the school code at sign-in.
+
+### Where to host
+Use a **long-running host** that keeps a process, a disk or object storage, and a Postgres database: a small VPS, Render, Fly.io, Railway or any container host. **Do not use Vercel Functions or other serverless hosts**: the file system is read-only and the app keeps school data in memory in one long-running process.
+
+### Configuration (environment variables)
+| Variable | Purpose |
+|---|---|
+| `NODE_ENV=production`, `DEMO_MODE=false` | Production mode |
+| `SESSION_SECRET` | 32+ random characters; each school's signing secret is derived from it |
+| `DATABASE_URL` | Postgres connection string. Each school gets its own schema; the platform owner uses the `platform` schema. Without it, SQLite files are used (one per school) |
+| `DATABASE_SSL=true` | Require TLS to Postgres where the provider supports it |
+| `DATA_DIR` | Private persistent folder (registry `schools.json`, local uploads, SQLite when no Postgres) |
+| `STORAGE_DRIVER=s3`, `S3_BUCKET`, region and credentials | Uploaded files in object storage under `schools/<code>/private/` (the first school keeps `private/`) |
+| `SCHOOL_CODE` | Code of the first school (default `main`) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | First school's first administrator (first start only) |
+| `PLATFORM_OWNER_EMAIL`, `PLATFORM_OWNER_PASSWORD` | First platform owner (12+ characters, changed at first sign-in); the owner screen is at `/platform` |
+| `COOKIE_SECURE=true`, `HOST`, `PORT` | Behind HTTPS |
+
+### Container
+`Dockerfile` builds one image for every school. Mount a volume at `/data` (or use object storage and Postgres only) and set the variables above. The container health check calls `/api/health`, which also answers load-balancer checks.
+
+### Adding schools
+Sign in to `/platform` as the owner and use "Add a school". The head receives a temporary password and sets their own at first sign-in. The command `npm run create-school` still works when the app is stopped.
+
+### Limits per school
+The owner sets, per school, a student limit and a file-storage limit ("Set limits" on the owner screen). A school at its limit gets a clear message and cannot add students or upload more files until the owner raises it.
+
+### Backing up and restoring one school
+With the app stopped:
+```
+npm run school-backup -- backup  --code alpha --out backups/alpha-2026-11-02
+npm run school-backup -- restore --code alpha --from backups/alpha-2026-11-02 --yes
+```
+A backup holds one school's tables and its local uploads. It restores only into the same school code and never touches other schools. Files kept in S3 are not copied by this command: turn on bucket versioning or replication. For disaster recovery also take regular full Postgres backups from your provider. Rehearse a restore before relying on it.
+
+### Verifying against Postgres
+`TEST_POSTGRES_URL=postgres://user@host:5432/postgres npm test` runs the multi-school, school-identity and hosting tests against a real Postgres (each test creates and drops its own database).
+
+### The curriculum library (ships empty)
+The platform contains **no ready-made lessons**: the Content Studio starts blank and each school writes its own. Teachers and administrators see "Add from library" and the library is empty until the owner adds items.
+To share a finished course with other schools: write and release it in a school (for example your pilot school), stop the app, then run
+```
+npm run library-export -- --code main --class SS1 --subject Mathematics --term 1 --id ss1-mathematics-term1 --title "SS1 Mathematics, First Term"
+```
+This writes `library/<id>.json` (weeks that use pictures uploaded to that school are left out, because the pictures belong to the school). Commit the file and deploy. Exporting the same id again raises its version, and schools see "newer version available". A school that copies a week gets its own independent, editable copy that stays locked to students until the teacher releases it; existing weeks are never replaced. `LIBRARY_DIR` can point at another folder.

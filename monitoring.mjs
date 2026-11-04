@@ -2,6 +2,7 @@ import {db,sql,save} from './store.mjs';
 import {randomUUID} from 'node:crypto';
 import {academicSession} from './context.mjs';
 import {rememberLearningReleases} from './learning-releases.mjs';
+import {classSupport,defaultSupportSettings} from './support.mjs';
 
 const ratio=(done,total)=>({done,total,percent:total?Math.round(done/total*10000)/100:0});
 export const monitoringCategories=['content','exercises','quizzes','reflections','assignments'];
@@ -41,6 +42,34 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   if(!note)fail(404,'Note submission not found.');if(note.week)fail(409,'This note already has a learning week.');
   const history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState);if(!history.some(v=>v.week===Number(b.week)))fail(400,'Choose a released learning week.');
   note.week=Number(b.week);audit(u,`Linked note ${note.id} to week ${note.week}`);await save();json({ok:true});return true;
+ }
+ if(endpoint==='support-settings'&&['GET','POST'].includes(method)){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');
+  if(method==='POST'){
+   if(u.role!=='ADMIN')fail(403,'Only the administrator can change the support rules.');
+   const n=(v,lo,hi,name)=>{const x=Number(v);if(!Number.isFinite(x)||x<lo||x>hi)fail(400,name+' must be between '+lo+' and '+hi+'.');return x;};
+   const bands={developing:n(b.bands?.developing,1,99,'Developing'),proficient:n(b.bands?.proficient,1,99,'Proficient'),mastered:n(b.bands?.mastered,1,100,'Mastered')};
+   if(!(bands.developing<bands.proficient&&bands.proficient<bands.mastered))fail(400,'Bands must rise: developing, proficient, mastered.');
+   db.supportSettings={...defaultSupportSettings,...(db.supportSettings||{}),bands,enoughAnswers:n(b.enoughAnswers??defaultSupportSettings.enoughAnswers,1,50,'Answers needed'),behindDays:n(b.behindDays??defaultSupportSettings.behindDays,1,30,'Behind days'),inactiveDays:n(b.inactiveDays??defaultSupportSettings.inactiveDays,1,60,'Inactive days')};
+   audit(u,'Changed support monitor rules');await save();
+  }
+  json({settings:{...defaultSupportSettings,...(db.supportSettings||{})},defaults:defaultSupportSettings});return true;
+ }
+ if(endpoint==='support'&&method==='GET'){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);
+  if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Choose a valid class and subject.');
+  const sessionId=academicSession(),history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState),released=new Set(history.map(r=>r.lesson));
+  const weeks=course(c,s,t).map(w=>({...w,lessons:w.lessons.filter(l=>released.has(l.id)),releasedAt:history.filter(r=>r.week===w.id&&r.releasedAt).map(r=>r.releasedAt).sort()[0]||null})).filter(w=>w.lessons.length).sort((a,b)=>a.id-b.id);
+  const fits=v=>v.sessionId===sessionId&&v.class===c&&v.subject===s&&v.term===t;
+  const records=Object.fromEntries(['practiceAttempts','progress','assessmentAttempts','submissions','reflections','assignments'].map(key=>[key,(db[key]||[]).filter(fits)]));
+  records.assignments=records.assignments.filter(a=>!a.status||a.status==='PUBLISHED'||a.status==='SCHEDULED'&&Date.parse(a.releaseAt)<=Date.now());
+  const students=db.users.filter(x=>x.role==='STUDENT'&&x.status==='ACTIVE'&&db.enrolments.some(e=>e.student===x.id&&e.sessionId===sessionId&&e.class===c));
+  const seen=new Map((await sql.all('SELECT user_id,last_seen FROM student_presence')).map(r=>[r.user_id,r.last_seen]));
+  const settings={...defaultSupportSettings,...(db.supportSettings||{})};
+  const result=classSupport(students.map(x=>({id:x.id,name:x.name})),weeks,records,{settings,seen,records});
+  const only=url.searchParams.get('student');
+  if(only){const row=result.students.find(r=>r.id===only);if(!row)fail(404,'Student not found in this class.');json({student:row,settings,generatedAt:new Date().toISOString()});return true;}
+  json({...result,weeks:weeks.map(w=>({id:w.id,title:w.title})),generatedAt:new Date().toISOString()});return true;
  }
  const personal=endpoint==='my-progress';
  if((endpoint!=='monitoring'&&!personal)||method!=='GET')return false;

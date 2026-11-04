@@ -38,6 +38,10 @@ const registryFile=path.join(rootDir,'schools.json');
 const readRegistry=()=>{try{return JSON.parse(fs.readFileSync(registryFile,'utf8'));}catch{return {schools:[]};}};
 const writeRegistry=r=>{const tmp=registryFile+'.tmp';fs.writeFileSync(tmp,JSON.stringify(r,null,1),{mode:0o600});fs.renameSync(tmp,registryFile);};
 const schoolDir=(code)=>code===DEFAULT_CODE?rootDir:path.join(rootDir,'schools',code);
+// The first-run password is announced only once the app is really listening, so a start that fails (for example, the port is busy) never prints a password that no running copy accepts.
+let firstRunNotice='';
+export const takeFirstRunNotice=()=>{const n=firstRunNotice;firstRunNotice='';return n;};
+export const dataFolder=()=>rootDir;
 async function loadTenant(slug,dir,{admin,name}={}){
  const isDefault=slug===DEFAULT_CODE;
  fs.mkdirSync(dir,{recursive:true});
@@ -82,7 +86,7 @@ if(process.env.NODE_ENV==='production'){
  db.appSecret=appSecretFor(slug);
 }
 await save();
-if(firstRun&&isDefault&&startedClean){const note=path.join(dir,'FIRST-LOGIN.txt');fs.writeFileSync(note,`First sign-in\nEmail:    ${firstRun.email}\nPassword: ${firstRun.password}\nYou will be asked to choose a new password immediately. This file is deleted afterwards.\n`,{mode:0o600});console.log(`\n=====================================================\n  FIRST RUN - administrator account created\n  Email:    ${firstRun.email}\n  Password: ${firstRun.password}\n  (temporary - you must change it at first sign-in)\n=====================================================\n`);}
+if(firstRun&&isDefault&&startedClean){const note=path.join(dir,'FIRST-LOGIN.txt');fs.writeFileSync(note,`First sign-in\nEmail:    ${firstRun.email}\nPassword: ${firstRun.password}\nYou will be asked to choose a new password immediately. This file is deleted afterwards.\n`,{mode:0o600});firstRunNotice=`\n=====================================================\n  FIRST RUN - administrator account created\n  Email:    ${firstRun.email}\n  Password: ${firstRun.password}\n  (temporary - you must change it at first sign-in)\n=====================================================\n`;}
 
 return {slug,dir,sql,get db(){return db;},save,sessions:durableSessions(sql),uploadTokens:new Map(),isDefault};
 

@@ -2,6 +2,14 @@
 
 A working student-centred LMS with administrator approval, subject teachers, private work submission, interactive learning and assessment-based mastery. School motto: Raising young minds for future impact.
 
+## First sign-in, owner page and forgotten passwords (local use)
+
+1. `npm ci`, `npm run build`, `npm start`. On a brand-new data folder the terminal prints the **administrator** email and a temporary password, and on a development machine also the **school owner** sign-in. Sign in and choose your own password when asked.
+2. The start-up screen also shows `Sign-in mode` (real school data or DEMO) and the `Data folder` in use. A second start on the same folder prints no new password: use the one you chose.
+3. **School owner page** (add, suspend and manage schools): open `/platform`. The sign-in page links to it. A school's people can use "Sign in to a different school" and type their school code.
+4. **Forgot the administrator password?** Stop the app, then run `npm run reset-admin` (add `-- --school <code>` for another school). It prints a new temporary password.
+5. If the browser says "email or password is incorrect" right after a fresh start, check that no older copy is still running on the same port (it would answer with its own accounts, for example the demo ones). The app now says so when the port is busy.
+
 ## First sign-in (clean install)
 
 A fresh install contains no students, teachers, lessons or sample data, only one administrator.

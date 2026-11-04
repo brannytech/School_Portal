@@ -176,3 +176,5 @@
 .st-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:480px){.st-row{grid-template-columns:1fr}}
 .st-qimage{display:grid;gap:8px;margin:8px 0}.st-qimage .st-image-thumb{max-width:220px;border-radius:6px}
+.st-skill{margin:10px 0;padding:10px;border:1px dashed var(--line);border-radius:10px}.st-skill .st-row{align-items:end}.st-skill input{width:100%}
+.st-skill button{min-height:44px;padding:0 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface,#fff);font:inherit;cursor:pointer}.st-skill .st-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}

@@ -92,7 +92,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   if(!Number.isInteger(Number(id))||Number(id)<1||Number(id)>52)throw Error('Choose a learning week from 1 to 52.');
   if(!discard&&s.dirty&&!await save())return;
   const request=s.loadRequest=(s.loadRequest||0)+1;status('Loading week '+Number(id)+'…');host.setAttribute('aria-busy','true');
-  const data=await call('weekly-template?week='+Number(id)),templates=await call('studio-templates'),assignmentData=await call('assignments?week='+Number(id)).catch(()=>({assignments:[]}));
+  const data=await call('weekly-template?week='+Number(id)),templates=await call('studio-templates'),assignmentData=await call('assignments?week='+Number(id)).catch(()=>({assignments:[]}));s.skills=(await call('skills').catch(()=>({skills:[]}))).skills||[];
   if(s.disposed||request!==s.loadRequest)return;
   destroyEditor();
   s.week=structuredClone(data.draft?.week||data.published||{id:Number(id),title:'',subtitle:'',lessons:[],quiz:[],reflectionPrompt:'What did you learn and what needs more practice?'});
@@ -212,13 +212,13 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
   if(s.pane==='assignment'){
    const a=currentAssignment();if(!a){el.innerHTML='<div class="st-empty"><h3>Choose an assignment</h3></div>';return;}
    if(a.mode!=='ONLINE'&&s.assignTab==='questions')s.assignTab='write';
-   if(s.assignTab==='questions'){el.innerHTML=assignmentTabsHTML(a,s.assignTab)+questionPanelHTML({questions:a.questions||[],index:s.assignIndex,bank:'assign'});return;}
+   if(s.assignTab==='questions'){el.innerHTML=assignmentTabsHTML(a,s.assignTab)+questionPanelHTML({questions:a.questions||[],index:s.assignIndex,bank:'assign',skills:s.skills});return;}
    el.innerHTML=assignmentTabsHTML(a,s.assignTab)+toolbarHTML()+`<article class="st-page"><textarea data-path="assign.title" rows="1" aria-label="Assignment title" placeholder="Assignment title">${esc(a.title)}</textarea><div class="st-editor" data-editor></div></article>`;
    mountEditor();return;
   }
-  if(s.pane==='quiz'){el.innerHTML=questionPanelHTML({questions:s.week.quiz||[],index:s.quizIndex,quiz:true});return;}
+  if(s.pane==='quiz'){el.innerHTML=questionPanelHTML({questions:s.week.quiz||[],index:s.quizIndex,quiz:true,skills:s.skills});return;}
   if(!lesson){el.innerHTML=`<div class="st-empty"><h3>${s.week.lessons.length?'Choose a subtopic':'This week is empty'}</h3><p>Write your lesson as one continuous page: text, equations, images and graphs together.</p>${button('new-lesson','Create the first subtopic','class="primary"')}</div>`;return;}
-  if(s.pane==='practice'){el.innerHTML=mainTabs(lesson)+questionPanelHTML({questions:practiceOf(lesson),index:s.questionIndex,quiz:false});return;}
+  if(s.pane==='practice'){el.innerHTML=mainTabs(lesson)+questionPanelHTML({questions:practiceOf(lesson),index:s.questionIndex,quiz:false,skills:s.skills});return;}
   el.innerHTML=mainTabs(lesson)+toolbarHTML()+`<article class="st-page"><textarea data-path="lesson.title" rows="1" aria-label="Subtopic title" placeholder="Subtopic title">${esc(lesson.title)}</textarea><div class="st-editor" data-editor></div></article>`;
   mountEditor();
  }
@@ -502,6 +502,10 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
     else{if(!uploadImage)throw Error('Image upload is not available here.');const file=await pickImageFile();if(!file)return;status('Uploading picture…');const fileId=await uploadLessonImage(file,uploadImage);item.image={fileId,alt:item.image?.alt||''};status('Picture added. Describe it for learners who cannot see it.');}
     touch(prefix);refreshQuestions();
    }
+   else if(action==='add-skill'){
+    const input=host.querySelector('[data-new-skill]'),name=(input?.value||'').trim().replace(/\s+/g,' ');if(!name){status('Write the skill name first.');return;}
+    try{s.skills=(await call('skills',{name})).skills;const prefix=target.dataset.bank,list=questionList(prefix),item=list[s[indexField(prefix)]];const canonical=s.skills.find(v=>v.toLowerCase()===name.toLowerCase())||name;if(item){item.skill=canonical;changed();}refreshQuestions();status('Skill added.');}catch(error){status(error.message);}
+   }
    else if(action==='add-practice'){const lesson=current();lesson.questions.push(newQuestion(uid()));s.questionIndex=practiceOf(lesson).length-1;changed();refreshQuestions();}
    else if(action==='add-quiz'){s.week.quiz.push(newQuestion(uid(),'quiz'));s.quizIndex=s.week.quiz.length-1;changed();refreshQuestions();}
    else if(action==='remove-practice'){const lesson=current(),item=practiceOf(lesson)[s.questionIndex];lesson.questions=lesson.questions.filter(v=>v!==item);s.questionIndex=Math.max(0,s.questionIndex-1);changed();refreshQuestions();}
@@ -542,7 +546,7 @@ export async function openContentStudio({host,context,api,allocations=[],week=1,
    if(key==='title'){const label=q(`[data-outline-title="${CSS.escape(lesson.id)}"]`);if(label)label.textContent=lessonName(lesson,s.week.lessons.indexOf(lesson));}
    return;
   }
-  if(root==='practice'||root==='quiz'||root==='assign'&&path.split('.')[1]!==undefined&&['prompt','options','answer','answers','accepted','explanation','hint','marks','tolerance','difficulty'].includes(path.split('.')[1]))writeQuestion(path,value);
+  if(root==='practice'||root==='quiz'||root==='assign'&&path.split('.')[1]!==undefined&&['prompt','options','answer','answers','accepted','explanation','hint','marks','tolerance','difficulty','skill'].includes(path.split('.')[1]))writeQuestion(path,value);
   else if(root==='assign')writeAssignment(path,value,el);
  }
  async function onChange(event){

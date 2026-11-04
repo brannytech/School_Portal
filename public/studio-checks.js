@@ -10,6 +10,8 @@ export function publicationIssues(week,targets=null){
  function questions(list,lessonId,bank){
   const label=bank==='quiz'?'Weekly quiz':'Practice';
   if(!list?.length){add(label+(bank==='quiz'?': no weekly quiz questions yet.':': no practice questions yet.'),{lessonId,bank},'warning');return;}
+  const untagged=list.filter(q=>!filled(q.skill)).length;
+  if(untagged)add(label+': '+untagged+' question'+(untagged===1?' has':'s have')+' no skill tag yet. Tags let the support board show which skill a child is missing.',{lessonId,bank},'warning');
   list.forEach((q,index)=>{const target={lessonId,bank,index},prefix=label+' question '+(index+1)+': ';
    for(const [key,text]of [['prompt','write the question.'],['answer','set the correct answer.'],['explanation','add feedback explaining the answer.']])if(!filled(q[key]))add(prefix+text,{...target,path:bank+'.'+key});
    if(q.kind==='choice'&&((q.options||[]).length<2||q.options.some(v=>!filled(v))||!q.options.includes(q.answer)))add(prefix+'provide at least two choices and select an answer from them.',{...target,path:bank+'.options'});

@@ -103,3 +103,31 @@ test('thresholds are editable settings',()=>{
  const strict={...defaultSupportSettings,bands:{developing:80,proficient:90,mastered:95}};
  assert.ok(run('s',[week(1,1)],{practiceAttempts:attempts('s',1,10,7)},{settings:strict}).flags.some(f=>f.code==='struggling'));
 });
+
+const tagged=(id,skills)=>({id,title:'Topic '+id,releasedAt:ago(1),lessons:[{id:id+'-1',questions:skills.map((sk,i)=>({id:'q'+i,prompt:'Q'+i,stage:'practice',...(sk?{skill:sk}:{})}))}]});
+test('skills: results are grouped by the question tag; untagged questions are ignored for skills',()=>{
+ const w=tagged(1,['Adding fractions','Adding fractions','Adding fractions','Adding fractions','Simplifying','Simplifying','Simplifying','Simplifying','Simplifying','Simplifying',null,null]);
+ const rows=[...attempts('s',1,4,0),...attempts('s',1,10,10).slice(4,10)];
+ const r=run('s',[w],{practiceAttempts:rows});
+ const add=r.skills.find(k=>k.name==='Adding fractions'),simp=r.skills.find(k=>k.name==='Simplifying');
+ assert.equal(add.score,0);assert.equal(add.level,'enough');assert.equal(simp.score,100);assert.equal(r.skills.length,2);
+ assert.deepEqual(r.skillNeedsHelp.map(k=>k.name),['Adding fractions']);assert.deepEqual(r.skillStrengths.map(k=>k.name),['Simplifying']);
+});
+
+test('skills: a thin skill is not flagged, and one weak skill is Watch, never Needs support now',()=>{
+ const w=tagged(1,['A','A','B','B','B','B','B','B','B','B','B','B']);
+ const thin=run('s',[w],{practiceAttempts:attempts('s',1,2,0)});
+ assert.ok(!thin.flags.some(f=>f.code==='skill_gap'));
+ const rows=[...attempts('s',1,2,0),...attempts('s',1,12,12).slice(2)]; // A wrong twice (thin), B right
+ const some=tagged(1,['A','A','A','A','A','A','B','B','B','B','B','B']);
+ const r=run('s',[some],{practiceAttempts:[...attempts('s',1,6,0),...attempts('s',1,12,12).slice(6)]});
+ assert.ok(r.flags.some(f=>f.code==='skill_gap'&&!f.severe));
+ assert.equal(r.topics[0].score,50);assert.equal(r.status,'watch');
+});
+
+test('class view lists skills the whole class finds hard',()=>{
+ const students=['a','b','c'].map(id=>({id,name:id}));const w=tagged(1,Array(12).fill('Ratios'));
+ const records={assignments:[],submissions:[],reflections:[],progress:[],assessmentAttempts:[],practiceAttempts:students.flatMap(s=>attempts(s.id,1,6,1))};
+ const out=classSupport(students,[w],records,{now:NOW,records});
+ assert.equal(out.weakSkills[0].name,'Ratios');assert.ok(out.weakSkills[0].score<60);
+});

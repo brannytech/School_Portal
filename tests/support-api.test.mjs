@@ -36,5 +36,19 @@ test('Support monitor API: staff only, evidence-based status, admin-editable rul
    const ok=await req('support-settings',{bands:{developing:95,proficient:97,mastered:99}},admin);assert.equal(ok.status,200);assert.equal(ok.value.settings.bands.developing,95);
    assert.equal((await req('support-settings',null,teacher)).value.settings.bands.developing,95);
   });
+ await t.test('skills: staff add to a subject list without duplicates; students cannot; admin can remove',async()=>{
+   assert.equal((await req('skills',null,student)).status,403);
+   const a=await req('skills',{name:'  Adding   fractions '},teacher);assert.equal(a.status,200);assert.deepEqual(a.value.skills,['Adding fractions']);
+   const b=await req('skills',{name:'adding fractions'},teacher);assert.deepEqual(b.value.skills,['Adding fractions']);
+   assert.equal((await req('skills',{name:'Adding fractions',remove:true},teacher)).status,403);
+   const c=await req('skills',{name:'Adding fractions',remove:true},admin);assert.deepEqual(c.value.skills,[]);
+  });
+ await t.test('a skill tag is saved with the question, cleaned, and read back; an empty tag is dropped',async()=>{
+   const q=(id,skill)=>({id,prompt:'Evaluate 2 + 3.',kind:'numeric',answer:'5',explanation:'Add.',...(skill!==undefined?{skill}:{})});
+   const week={id:9,title:'Tagging',subtitle:'x',reflectionPrompt:'?',lessons:[{id:'9-first',title:'Adding',explain:'Combine.',questions:[q('a','  Adding fractions  '),q('b',''),q('c')]}],quiz:[q('qa','Ratios')]};
+   const saved=await req('weekly-template',{week,publish:false},teacher);assert.equal(saved.status,200);
+   const back=await req('weekly-template?week=9',null,teacher);const w=back.value.draft?.week||back.value.published;
+   const qs=w.lessons[0].questions;assert.equal(qs.find(x=>x.id==='a').skill,'Adding fractions');assert.ok(!('skill' in qs.find(x=>x.id==='b')));assert.ok(!('skill' in qs.find(x=>x.id==='c')));assert.equal(w.quiz[0].skill,'Ratios');
+  });
  }finally{await new Promise(r=>{if(server.exitCode!==null)return r();server.once('exit',r);server.kill();});}
 });

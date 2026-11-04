@@ -1,0 +1,65 @@
+// Support board (plan section 12): who needs help, why, and what to do. Staff only.
+let supportView='board',supportFilter='all',supportData=null,supportRequest=0,supportContext='';
+const supportStatus={needs_support:['Needs support now','bad'],watch:['Watch','warn'],on_track:['On track','ok'],excelling:['Excelling','ok'],no_evidence:['No evidence yet','muted']};
+const supportBand={'Needs support':'bad',Developing:'warn',Proficient:'ok',Mastered:'ok'};
+const supportArrow={improving:'▲ Improving',steady:'► Steady',slipping:'▼ Slipping'};
+const supportBadge=key=>{const [label,tone]=supportStatus[key]||['',''];return `<span class="support-badge ${tone}">${esc(label)}</span>`;};
+const supportPrevious=progressPage;
+progressPage=function(){
+ if(!staff())return supportPrevious();
+ const context=user.id+'|'+academicId+'|'+className+'|'+subject+'|'+term;
+ if(context!==supportContext){supportContext=context;supportData=null;supportFilter='all';}
+ const tabs=`<div class="support-tabs" role="tablist" aria-label="Monitor view">${[['board','Support board'],['work','Work completed']].map(([k,l])=>`<button role="tab" aria-selected="${supportView===k}" class="${supportView===k?'active':''}" data-action="support-view" data-view="${k}">${l}</button>`).join('')}</div>`;
+ if(supportView==='work')return tabs+supportPrevious();
+ return heading('Who needs help today?','Understanding is measured from practice, quizzes and marked assignments. Work done is shown separately.',btn('support-refresh','Refresh')+(user.role==='ADMIN'?' '+btn('support-rules','Rules'):'')+' '+btn('support-how','How we calculate this'))+tabs+'<div id="support-board" aria-live="polite" aria-busy="true"><p class="muted">Loading…</p></div>';
+};
+function supportStrip(data){
+ return `<div class="support-strip">${Object.entries(supportStatus).map(([key,[label,tone]])=>`<button class="support-count ${tone} ${supportFilter===key?'on':''}" data-action="support-filter" data-status="${key}" aria-pressed="${supportFilter===key}"><strong>${data.counts[key]||0}</strong><span>${label}</span></button>`).join('')}${supportFilter!=='all'?btn('support-filter','Show everyone','subtle','data-status="all"'):''}</div>`;
+}
+function supportRow(r){
+ const chips=r.reasons.length?r.reasons.map(x=>`<span class="support-chip">${esc(x)}</span>`).join(''):`<span class="muted small">${r.status==='no_evidence'?'Nothing to measure yet':'No concerns'}</span>`;
+ return `<li class="support-row"><button class="support-open" data-action="support-student" data-id="${esc(r.id)}" aria-label="Open ${esc(r.name)}"><span class="support-name"><strong>${esc(r.name)}</strong>${supportBadge(r.status)}</span><span class="support-chips">${chips}</span><span class="support-meta small muted">${r.overall===null?'Understanding: not enough evidence':'Understanding '+Math.round(r.overall)+'%'} · ${r.engagement===null?'':'Work done '+Math.round(r.engagement)+'%'}${r.trend?' · '+supportArrow[r.trend]:''}</span></button></li>`;
+}
+function supportReteach(list){
+ if(!list.length)return '';
+ return `<section class="card"><h3>Topics to reteach</h3><p class="small muted">Class average below 60%, or more than a third of the class below 50%.</p>${list.map(t=>`<div class="support-reteach"><strong>${esc(t.title)}</strong> · average ${t.average}% · ${t.weakStudents} of ${t.measured} students below 50%${t.commonMistakes.length?'<ul>'+t.commonMistakes.map(m=>`<li>${esc(m.prompt)} — missed ${m.misses} time${m.misses===1?'':'s'}${m.commonWrongAnswer?`; most common wrong answer: <strong>${esc(m.commonWrongAnswer)}</strong>`:''}</li>`).join('')+'</ul>':''}</div>`).join('')}</section>`;
+}
+function supportSkills(list){
+ if(!list?.length)return '';
+ return `<section class="card"><h3>Skills the class finds hard</h3><p class="small muted">Measured from first-try practice answers on tagged questions.</p><ul>${list.map(k=>`<li><strong>${esc(k.name)}</strong> · ${Math.round(k.score)}% across ${k.students} student${k.students===1?'':'s'} (${k.answers} answers)</li>`).join('')}</ul></section>`;
+}
+function supportHeat(data){
+ if(!data.weeks.length)return '';
+ return `<details class="card support-heat"><summary>Heatmap by topic</summary><div class="table-wrap"><table><thead><tr><th>Student</th>${data.weeks.map(w=>`<th>${esc(w.title)}</th>`).join('')}</tr></thead><tbody>${data.students.map(r=>`<tr><th scope="row">${esc(r.name)}</th>${data.weeks.map(w=>{const t=r.topics.find(x=>x.week===w.id);const tone=!t||t.level==='none'?'muted':t.level==='thin'?'thin':supportBand[t.band]||'';return `<td class="heat ${tone}" title="${esc(t?.evidence.text||'')}">${t&&t.score!==null?Math.round(t.score)+'%':'–'}${t&&t.level==='thin'?' •':''}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div><p class="small muted">• means thin evidence: too few answers to judge. Grey means nothing to measure yet.</p></details>`;
+}
+function supportRender(data){
+ const rows=data.students.filter(r=>supportFilter==='all'||r.status===supportFilter);
+ return supportStrip(data)+(data.students.length?`<ul class="support-list">${rows.map(supportRow).join('')||'<li class="muted">No students in this group.</li>'}</ul>`:'<p class="muted">No students are enrolled in this class yet.</p>')+supportReteach(data.reteach)+supportSkills(data.weakSkills)+supportHeat(data);
+}
+async function loadSupport(){
+ const holder=document.querySelector('#support-board');if(!holder||!staff())return;
+ const request=++supportRequest,context=supportContext;holder.setAttribute('aria-busy','true');
+ try{const data=await api('support?'+new URLSearchParams(ctx()));if(request!==supportRequest||!holder.isConnected||context!==supportContext)return;supportData=data;holder.innerHTML=supportRender(data);}
+ catch(error){if(request===supportRequest&&holder.isConnected)holder.innerHTML=`<p class="error" role="alert">${esc(error.message)}</p>${btn('support-refresh','Retry')}`;}
+ finally{if(request===supportRequest)holder.setAttribute('aria-busy','false');}
+}
+function supportProfile(r,settings){
+ const topics=r.topics.map(t=>`<tr><td>${esc(t.title)}</td><td>${t.level==='none'?'<span class="muted">No evidence yet</span>':t.level==='thin'?`${Math.round(t.score)}% <span class="support-badge muted">thin</span>`:`${Math.round(t.score)}% <span class="support-badge ${supportBand[t.band]||''}">${esc(t.band)}</span>`}</td><td class="small">${esc(t.evidence.text)}</td></tr>`).join('');
+ const flags=r.flags.length?r.flags.map(f=>`<li><strong>${esc(f.label)}</strong>${f.severe?' (urgent)':''}<br>${esc(f.reason)}<br><span class="small muted">Suggested: ${esc(f.action)}</span></li>`).join(''):'<li class="muted">No flags.</li>';
+ return `<p>${supportBadge(r.status)} ${r.trend?`<span class="small">${supportArrow[r.trend]} (${r.trendChange>0?'+':''}${r.trendChange} points)</span>`:''}</p><h3>Why</h3><ul class="support-flags">${flags}</ul>${r.skills?.length?`<h3>Skills</h3><p class="small">${r.skillNeedsHelp.length?'<strong>Needs practice:</strong> '+r.skillNeedsHelp.map(k=>esc(k.name)+' '+Math.round(k.score)+'%').join('; ')+'. ':''}${r.skillStrengths.length?'<strong>Strong:</strong> '+r.skillStrengths.map(k=>esc(k.name)+' '+Math.round(k.score)+'%').join('; ')+'.':''}${!r.skillNeedsHelp.length&&!r.skillStrengths.length?'Not enough answers on any one skill yet.':''}</p>`:'<p class="small muted">Tag questions with a skill in the Studio to see results by skill.</p>'}<h3>Topics</h3><div class="table-wrap"><table><thead><tr><th>Topic</th><th>Understanding</th><th>Evidence</th></tr></thead><tbody>${topics||'<tr><td colspan="3" class="muted">No released topics yet.</td></tr>'}</tbody></table></div><p class="small muted">Last activity: ${r.lastActive?esc(new Date(r.lastActive).toLocaleString('en-NG',{timeZone:'Africa/Lagos'})):'none recorded'}. A score from only a few answers is shown as thin evidence, never as weak.</p>`;
+}
+function supportHow(s){
+ return `<p>Understanding and work done are measured separately. A child can do all the work and still not understand, or do little and understand well.</p><h3>Understanding score (per topic)</h3><ul><li>Practice questions, <strong>first try only</strong>: ${s.weights.practice}%</li><li>Quizzes, best of the latest two: ${s.weights.quiz}%</li><li>Marked assignments: ${s.weights.assignment}%</li></ul><p>If a source is missing, its share is given to the others.</p><h3>Evidence</h3><p>Enough evidence means ${s.enoughAnswers} or more practice answers, or at least one submitted quiz. Less is shown as <em>thin</em> and is never called weak. No answers at all is <em>no evidence yet</em>, not zero.</p><h3>Bands</h3><p>Mastered ${s.bands.mastered}+, Proficient ${s.bands.proficient}–${s.bands.mastered-1}, Developing ${s.bands.developing}–${s.bands.proficient-1}, Needs support below ${s.bands.developing}.</p><h3>Flags</h3><ul><li>Struggling: below ${s.bands.developing} with enough evidence (urgent)</li><li>Slipping: down ${s.slippingDrop} points or more from the previous topic (urgent)</li><li>Inactive: nothing for ${s.inactiveDays} days (urgent)</li><li>Behind: topic released ${s.behindDays}+ days ago, untouched</li><li>Possible guessing: ${s.guessingTries}+ tries on average before a correct answer, over ${s.guessingQuestions}+ questions. This is a pattern, not proof.</li><li>Overconfident: confidence ${s.overconfidentConfidence}/5 or more with a low score</li><li>Asked for help: a question waiting for a reply</li><li>Late pattern: ${s.lateOfLastFour} of the last 4 assignments late</li><li>Missing work: under ${s.missingWorkPercent}% of assignments submitted</li></ul><p class="small muted">These are starting rules. Compare them with your own judgement and ask the administrator to adjust them.</p>`;
+}
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-action^="support-"]');if(!button||!staff())return;const action=button.dataset.action;
+ if(action==='support-view'){supportView=button.dataset.view;render();return;}
+ if(action==='support-refresh'){loadSupport();return;}
+ if(action==='support-filter'){supportFilter=button.dataset.status===supportFilter?'all':button.dataset.status;const holder=document.querySelector('#support-board');if(holder&&supportData)holder.innerHTML=supportRender(supportData);return;}
+ if(action==='support-student'){try{const data=await api('support?'+new URLSearchParams({...ctx(),student:button.dataset.id}));modal(esc(data.student.name)+' · Support',supportProfile(data.student,data.settings));}catch(error){toast(error.message);}return;}
+ if(action==='support-how'){try{const data=await api('support-settings?'+new URLSearchParams(ctx()));modal('How we calculate this',supportHow(data.settings));}catch(error){toast(error.message);}return;}
+ if(action==='support-rules'){try{const {settings}=await api('support-settings?'+new URLSearchParams(ctx()));modal('Support rules',`<form data-form="support-rules"><p class="small muted">Bands must rise from developing to mastered. These rules apply to every class in this school.</p><div class="field"><label for="sr-d">Developing from</label><input id="sr-d" name="developing" type="number" min="1" max="99" value="${settings.bands.developing}"></div><div class="field"><label for="sr-p">Proficient from</label><input id="sr-p" name="proficient" type="number" min="1" max="99" value="${settings.bands.proficient}"></div><div class="field"><label for="sr-m">Mastered from</label><input id="sr-m" name="mastered" type="number" min="2" max="100" value="${settings.bands.mastered}"></div><div class="field"><label for="sr-e">Practice answers needed for enough evidence</label><input id="sr-e" name="enoughAnswers" type="number" min="1" max="50" value="${settings.enoughAnswers}"></div><div class="field"><label for="sr-b">Days before an untouched topic is "behind"</label><input id="sr-b" name="behindDays" type="number" min="1" max="30" value="${settings.behindDays}"></div><div class="field"><label for="sr-i">Days without activity before "inactive"</label><input id="sr-i" name="inactiveDays" type="number" min="1" max="60" value="${settings.inactiveDays}"></div><p class="error" role="alert" id="support-rules-error"></p>${btn('support-rules-save','Save rules','primary')}</form>`);}catch(error){toast(error.message);}return;}
+ if(action==='support-rules-save'){const f=Object.fromEntries(new FormData(button.closest('form')));try{await api('support-settings?'+new URLSearchParams(ctx()),{bands:{developing:f.developing,proficient:f.proficient,mastered:f.mastered},enoughAnswers:f.enoughAnswers,behindDays:f.behindDays,inactiveDays:f.inactiveDays});$('#modal').close();toast('Support rules saved.');loadSupport();}catch(error){const e=document.querySelector('#support-rules-error');if(e)e.textContent=error.message;}return;}
+});
+// Load the board whenever the Monitor page has just been drawn.
+new MutationObserver(()=>{const holder=document.querySelector('#support-board');if(holder&&holder.getAttribute('aria-busy')==='true'&&!holder.dataset.loading){holder.dataset.loading='1';loadSupport();}}).observe(document.body,{childList:true,subtree:true});

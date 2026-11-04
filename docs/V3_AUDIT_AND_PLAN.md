@@ -836,7 +836,7 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 **Workflow for the owner:** write and release Week 1 onward in the pilot school; when a course is finished, export it, commit the file, deploy; other schools copy it and make their own edits.
 
 ### 16.6h What comes after the multi-school foundation
-Merge pull requests #4, #6, #7, #8, #9, #10 and #11 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
+Merge pull requests #4, #6, #7, #8, #9, #10, #11 and #12 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
 
 ### 16.6e Hosting decision (2 November 2026)
 **One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.
@@ -980,4 +980,10 @@ Delivered (first slice, roughly half of section 12): `support.mjs` engine with 1
 
 Rules as built: understanding = practice first try 30%, quiz (best of latest two) 40%, marked assignments 30%, missing sources share their weight; enough evidence = 8 answers or 1 quiz; thin or none is never called weak. "Possible guessing" is a pattern (3 or more tries on average over 5 or more questions), not proof.
 
-Not yet built: support plans with targets and Met/Partly/Not met re-measure; form teacher and cross-subject view for admin; required topic/objective tag on questions in the Studio checks; nightly summary cache; period selector; pilot comparison against teachers' own lists (section 12.7); confidence rating field on reflections (the "Overconfident" flag reads `confidence` once the field exists). Parent report (V3.2r) reuses this engine.
+Not yet built (skill tags were delivered in PR #12, see 19a): support plans with targets and Met/Partly/Not met re-measure; form teacher and cross-subject view for admin; required topic/objective tag on questions in the Studio checks; nightly summary cache; period selector; pilot comparison against teachers' own lists (section 12.7); confidence rating field on reflections (the "Overconfident" flag reads `confidence` once the field exists). Parent report (V3.2r) reuses this engine.
+
+### 19a. Skill tags (PR #12)
+
+Delivered: a fixed skill list per subject (`GET/POST /api/skills`; staff add, only the administrator removes; spelling and case are unified); a "What skill does this test?" picker with an "Add skill" box on every question in the Studio (practice, weekly quiz, assignment); an advice-only readiness reminder for untagged questions; tags cleaned and kept even in private drafts. The engine groups first-try practice answers by skill (4 or more answers = enough): a weak skill raises a lighter "Weak skill" flag (Watch, never "Needs support now"); the student profile shows skills needing practice and strengths; the board lists "Skills the class finds hard". Untagged questions still count toward the topic score and are simply ignored for skills. The platform ships no skills or content; teachers define their own.
+
+Still open from section 19: confidence rating on reflections, support plans, form-teacher and cross-subject view, period selector, summary cache, pilot comparison. Quizzes are not yet broken down by skill (only practice is).

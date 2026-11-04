@@ -836,7 +836,7 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 **Workflow for the owner:** write and release Week 1 onward in the pilot school; when a course is finished, export it, commit the file, deploy; other schools copy it and make their own edits.
 
 ### 16.6h What comes after the multi-school foundation
-Merge pull requests #4, #6, #7, #8, #9 and #10 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
+Merge pull requests #4, #6, #7, #8, #9, #10 and #11 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
 
 ### 16.6e Hosting decision (2 November 2026)
 **One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.
@@ -972,3 +972,12 @@ Delivered: crest and photo as small WebP (15 KB and 37 KB, replacing a 1.34 MB P
 Measured: login page about 1.74 MB before, about 122 KB on the wire now; repeat visits cost 304 responses only. Guarded by `tests/performance.test.mjs` (budget 130 KB). 115 tests pass.
 
 Not yet done: content-hashed filenames with immutable caching (needs a build step), role-based script splitting, KaTeX font subsetting, smaller `state` calls, cache-first service worker, data-saver mode, PNG/Apple icons.
+
+
+## 19. V3.2m support monitor: status (PR #11)
+
+Delivered (first slice, roughly half of section 12): `support.mjs` engine with 16 unit tests; `GET /api/support` (class board, or one student with `?student=`); `GET/POST /api/support-settings` (admin edits bands, evidence threshold, behind and inactive days, validated and audited); the Monitor page now opens on a **Support board** with a **Work completed** tab holding the old view; status counts that filter the list, reason chips, student profile with flags and suggested actions, "Topics to reteach" with the most common wrong answer, heatmap (thin evidence shown differently), and a "How we calculate this" page. Checked in a browser at 1280 px and 390 px.
+
+Rules as built: understanding = practice first try 30%, quiz (best of latest two) 40%, marked assignments 30%, missing sources share their weight; enough evidence = 8 answers or 1 quiz; thin or none is never called weak. "Possible guessing" is a pattern (3 or more tries on average over 5 or more questions), not proof.
+
+Not yet built: support plans with targets and Met/Partly/Not met re-measure; form teacher and cross-subject view for admin; required topic/objective tag on questions in the Studio checks; nightly summary cache; period selector; pilot comparison against teachers' own lists (section 12.7); confidence rating field on reflections (the "Overconfident" flag reads `confidence` once the field exists). Parent report (V3.2r) reuses this engine.

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomBytes,randomUUID,createHmac,createHash,timingSafeEqual} from 'node:crypto';
 import zlib from 'node:zlib';
-import {db,save,hash,matches,assertCanAddStudent,assertStorageAvailable,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant} from './store.mjs';
+import {db,save,hash,matches,assertCanAddStudent,assertStorageAvailable,tenantDir,storagePrefix,sql,findSchool,onlySchool,schoolCount,sessionStore,uploadLinks,currentTenant,takeFirstRunNotice,dataFolder} from './store.mjs';
 import {weeks} from './content.mjs';
 import {profileApi} from './profile-api.mjs';
 import {studentApi} from './student-api.mjs';
@@ -12,7 +12,7 @@ import {weeklyContentApi,assignmentOpen,closingOpen,studentAssignment} from './w
 import {recordStudentPresence} from './presence.mjs';
 import {adminDirectory} from './admin-directory.mjs';
 import {publicBrand,serveBrandImage,brandingApi} from './branding.mjs';
-import {platformApi} from './platform.mjs';
+import {platformApi,platformNotice} from './platform.mjs';
 import {libraryApi} from './library.mjs';
 import {validateFile,storeFile,streamFile} from './storage.mjs';
 import {requestScope,academicSession,academicKey} from './context.mjs';
@@ -214,5 +214,12 @@ async function handle(req,res){
 }
 let requestTail=Promise.resolve();
 const server=http.createServer((req,res)=>{requestTail=requestTail.then(()=>requestScope.run({},()=>handle(req,res))).catch(e=>{console.error('Request failed:',e.message);if(!res.headersSent)res.writeHead(500);res.end();});});
-server.on('error',e=>{if(e.code==='EADDRINUSE'){console.error(`Port ${port} is already in use (another copy of this app or another program).\nChoose another port: set PORT=3001 in your .env or .env.production file, or stop the program using port ${port}.`);process.exit(1);}throw e;});
-server.listen(port,host,()=>console.log(`Olawale's Lab is ready at http://${host}:${server.address().port}`));
+server.on('error',e=>{if(e.code==='EADDRINUSE'){console.error(`Port ${port} is already in use (another copy of this app or another program).\nThis copy did NOT start. If an older copy (for example one started with the demo on) is still running, your browser is talking to that copy, with its own accounts and passwords.\nChoose another port: set PORT=3001 in your .env or .env.production file, or stop the program using port ${port}.`);process.exit(1);}throw e;});
+server.listen(port,host,()=>{
+ const notice=takeFirstRunNotice();if(notice)console.log(notice);
+ console.log(`Olawale's Lab is ready at http://${host}:${server.address().port}`);
+ console.log(`  Sign-in mode: ${demo?'DEMO (sample accounts, for testing only)':'real school data'}`);
+ console.log(`  Data folder:  ${dataFolder()}`);
+ platformNotice(`http://${host}:${server.address().port}`).then(t=>console.log(t),()=>{});
+ if(!notice)console.log('  Signing in as administrator? Use the email and the password you chose at first sign-in. Forgotten it? Stop the app and run:  npm run reset-admin');
+});

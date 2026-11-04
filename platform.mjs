@@ -16,6 +16,18 @@ const temp=()=>{const w=()=>randomBytes(3).toString('hex');return `Lab-${w()}-${
 // The first owner is created from the environment; the password must be changed at first sign-in.
 if(!await one('SELECT 1 AS x FROM owners')&&process.env.PLATFORM_OWNER_EMAIL&&String(process.env.PLATFORM_OWNER_PASSWORD||'').length>=12)
  await db.run('INSERT INTO owners(id,email,password_hash,must_change) VALUES (?,?,?,1)',[randomUUID(),process.env.PLATFORM_OWNER_EMAIL.toLowerCase(),hash(process.env.PLATFORM_OWNER_PASSWORD)]);
+// On a development machine with nothing configured, create the owner with a temporary password so the owner page can be used straight away.
+let created=null;
+if(!await one('SELECT 1 AS x FROM owners')&&process.env.NODE_ENV!=='production'){
+ created={email:(process.env.PLATFORM_OWNER_EMAIL||'owner@platform.local').toLowerCase(),password:temp()};
+ await db.run('INSERT INTO owners(id,email,password_hash,must_change) VALUES (?,?,?,1)',[randomUUID(),created.email,hash(created.password)]);
+}
+// Text for the start-up screen: where the owner page is and, once, the temporary sign-in.
+export async function platformNotice(base){
+ const has=!!await one('SELECT 1 AS x FROM owners');
+ if(created){const c=created;created=null;return `\n  SCHOOL OWNER PAGE (add and manage schools): ${base}/platform\n    Email:    ${c.email}\n    Password: ${c.password}   (temporary - you must change it at first sign-in)\n`;}
+ return has?`\n  School owner page (add and manage schools): ${base}/platform\n`:`\n  School owner page is off: set PLATFORM_OWNER_EMAIL and PLATFORM_OWNER_PASSWORD (12+ characters) to turn it on.\n`;
+}
 const audit=(owner,action)=>db.run('INSERT INTO owner_audit(id,at,owner_id,action) VALUES (?,?,?,?)',[randomUUID(),new Date().toISOString(),owner,action]);
 const cookieValue=req=>(req.headers.cookie||'').match(/(?:^|; )lab_platform=([^;]+)/)?.[1]||'';
 const cookie=(value,age)=>`lab_platform=${value}; HttpOnly; SameSite=Strict; Path=/api/platform; Max-Age=${age}${process.env.COOKIE_SECURE==='true'?'; Secure':''}`;

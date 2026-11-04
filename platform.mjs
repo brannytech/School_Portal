@@ -18,9 +18,19 @@ if(!await one('SELECT 1 AS x FROM owners')&&process.env.PLATFORM_OWNER_EMAIL&&St
  await db.run('INSERT INTO owners(id,email,password_hash,must_change) VALUES (?,?,?,1)',[randomUUID(),process.env.PLATFORM_OWNER_EMAIL.toLowerCase(),hash(process.env.PLATFORM_OWNER_PASSWORD)]);
 // On a development machine with nothing configured, create the owner with a temporary password so the owner page can be used straight away.
 let created=null;
-if(!await one('SELECT 1 AS x FROM owners')&&process.env.NODE_ENV!=='production'){
+if(!await one('SELECT 1 AS x FROM owners')&&process.env.NODE_ENV!=='production'&&process.env.PLATFORM_NO_AUTO!=='1'){
  created={email:(process.env.PLATFORM_OWNER_EMAIL||'owner@platform.local').toLowerCase(),password:temp()};
  await db.run('INSERT INTO owners(id,email,password_hash,must_change) VALUES (?,?,?,1)',[randomUUID(),created.email,hash(created.password)]);
+}
+// Create the owner, or give an existing owner a new temporary password. Used by `npm run reset-owner` while the app is stopped.
+export async function setOwner(email,password){
+ email=String(email||'').trim().toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Enter a valid owner email.');
+ if(String(password||'').length<12)throw Error('Use a temporary password of at least 12 characters.');
+ const existing=await one('SELECT id FROM owners WHERE email=?',[email]);
+ if(existing){await db.run('UPDATE owners SET password_hash=?,must_change=1 WHERE id=?',[hash(password),existing.id]);await db.run('DELETE FROM owner_sessions WHERE owner_id=?',[existing.id]);}
+ else await db.run('INSERT INTO owners(id,email,password_hash,must_change) VALUES (?,?,?,1)',[randomUUID(),email,hash(password)]);
+ return existing?'updated':'created';
 }
 // Text for the start-up screen: where the owner page is and, once, the temporary sign-in.
 export async function platformNotice(base){

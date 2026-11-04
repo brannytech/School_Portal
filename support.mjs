@@ -14,10 +14,12 @@ export const defaultSupportSettings={
  overconfidentConfidence:4,
  lateOfLastFour:2,
  missingWorkPercent:60,
+ skillEnoughAnswers:4,
  reteachAverage:60,reteachShare:1/3
 };
 export const severeFlags=['struggling','slipping','inactive'];
 export const flagInfo={
+ skill_gap:{label:'Weak skill',action:'Give a short extra practice set on this skill; show a worked example first.'},
  struggling:{label:'Struggling with a topic',action:'Reteach in a small group; give the easiest missed questions again.'},
  slipping:{label:'Slipping',action:'Check in; look for a missed lesson or a skipped prerequisite.'},
  behind:{label:'Behind',action:'Remind the student; check access (data, phone).'},
@@ -47,6 +49,10 @@ export function topicEvidence(student,week,records,settings=defaultSupportSettin
   t.count++;if(!t.solved){t.triesToSolve++;if(a.correct===true)t.solved=true;}
   tries.set(key,t);
  }
+ const skillOf=new Map(week.lessons.flatMap(l=>(l.questions||[]).filter(q=>q.skill).map(q=>[l.id+'|'+q.id,String(q.skill)])));
+ const bySkill=new Map();
+ for(const [key,t] of tries){const name=skillOf.get(key);if(!name)continue;const e=bySkill.get(name)||{name,answers:0,right:0};e.answers++;if(t.first)e.right++;bySkill.set(name,e);}
+ const skills=[...bySkill.values()].map(e=>({name:e.name,answers:e.answers,score:round(percent(e.right,e.answers)),level:e.answers>=settings.skillEnoughAnswers?'enough':'thin'}));
  const answers=tries.size,firstCorrect=[...tries.values()].filter(t=>t.first).length;
  const solvedTries=[...tries.values()].filter(t=>t.solved).map(t=>t.triesToSolve);
  const practice=answers?percent(firstCorrect,answers):null;
@@ -67,7 +73,7 @@ export function topicEvidence(student,week,records,settings=defaultSupportSettin
  return {week:week.id,title:week.title,score,band:score===null||level!=='enough'?null:bandFor(score,settings),level,
   evidence:{answers,assessments:sat.length,assignments:marked.size,text:level==='none'?'No evidence yet':`${score}% from ${answers} answer${answers===1?'':'s'}, ${sat.length} quiz${sat.length===1?'':'zes'}, ${marked.size} marked assignment${marked.size===1?'':'s'}`},
   sources:{practice:practice===null?null:round(practice),quiz,assignment:assignment===null?null:round(assignment)},
-  tries:solvedTries,lastAt:lastAt||null};
+  skills,tries:solvedTries,lastAt:lastAt||null};
 }
 
 // Trend: the newest topic with enough evidence against the earlier ones (up to two) that also have enough.
@@ -116,6 +122,12 @@ export function studentSupport(student,weeks,records,{now=Date.now(),lastSeen=nu
  const touched=new Set([...mine('progress').filter(p=>p.contentConsumedAt||p.complete).map(p=>p.lesson),...mine('practiceAttempts').map(a=>a.lesson)]);
  const lessonIds=new Set(weeks.flatMap(w=>w.lessons.map(l=>l.id)));
  const engagement=lessonsTotal?round(percent([...touched].filter(l=>lessonIds.has(l)).length,lessonsTotal)):null;
+ const skillTotals=new Map();
+ for(const t of topics)for(const k of t.skills){const e=skillTotals.get(k.name)||{name:k.name,answers:0,right:0};e.answers+=k.answers;e.right+=k.score/100*k.answers;skillTotals.set(k.name,e);}
+ const skillList=[...skillTotals.values()].map(e=>({name:e.name,answers:e.answers,score:round(percent(e.right,e.answers)),level:e.answers>=settings.skillEnoughAnswers?'enough':'thin'}));
+ const skillNeedsHelp=skillList.filter(k=>k.level==='enough'&&k.score<settings.bands.developing).sort((a,b)=>a.score-b.score).slice(0,3);
+ const skillStrengths=skillList.filter(k=>k.level==='enough'&&k.score>=settings.bands.proficient).sort((a,b)=>b.score-a.score).slice(0,3);
+ for(const k of skillNeedsHelp)add('skill_gap',` ${k.name} ${Math.round(k.score)}% (${k.answers} answers)`);
  const noEvidence=topics.every(t=>t.level==='none')&&!activityAt.length;
  const lightFlags=flags.filter(f=>!f.severe);
  const mastered=ok.filter(t=>t.score>=settings.bands.mastered).length;
@@ -128,7 +140,7 @@ export function studentSupport(student,weeks,records,{now=Date.now(),lastSeen=nu
  if(noEvidence&&!flags.some(f=>f.code==='behind'))status='no_evidence';
  const reasons=[...flags].sort((a,b)=>Number(b.severe)-Number(a.severe)).slice(0,3).map(f=>f.reason);
  const overall=ok.length?round(ok.reduce((n,t)=>n+t.score,0)/ok.length):null;
- return {id,name:student.name,status,flags,reasons,topics,trend,trendChange:change,engagement,overall,overallBand:overall===null?null:bandFor(overall,settings),lastActive:lastActive?new Date(lastActive).toISOString():null};
+ return {id,name:student.name,status,flags,reasons,topics,skills:skillList,skillNeedsHelp,skillStrengths,trend,trendChange:change,engagement,overall,overallBand:overall===null?null:bandFor(overall,settings),lastActive:lastActive?new Date(lastActive).toISOString():null};
 }
 
 // Class view: every student plus the topics the whole class should revisit.
@@ -144,7 +156,10 @@ export function classSupport(students,weeks,records,options={}){
   if(average>=settings.reteachAverage&&weak/cells.length<=settings.reteachShare)return null;
   return {week:w.id,title:w.title,average,weakStudents:weak,measured:cells.length,commonMistakes:commonMistakes(students,w,options.records||{})};
  }).filter(Boolean);
- return {counts,students:rows,reteach,settings};
+ const classSkills=new Map();
+ for(const r of rows)for(const k of r.skills){const e=classSkills.get(k.name)||{name:k.name,answers:0,right:0,students:0};e.answers+=k.answers;e.right+=k.score/100*k.answers;e.students++;classSkills.set(k.name,e);}
+ const weakSkills=[...classSkills.values()].map(e=>({name:e.name,answers:e.answers,students:e.students,score:round(percent(e.right,e.answers))})).filter(e=>e.answers>=settings.skillEnoughAnswers*2&&e.score<settings.reteachAverage).sort((a,b)=>a.score-b.score).slice(0,5);
+ return {counts,students:rows,reteach,weakSkills,settings};
 }
 
 // The three most-missed practice questions and the wrong answer chosen most often.

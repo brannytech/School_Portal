@@ -27,7 +27,8 @@ export function assignmentOpen(a,course,releaseState,scopeKey){
 export function closingOpen(week,c,s,t,releaseState,scopeKey){return !!week?.lessons.length&&week.lessons.every(l=>releaseState(c,s,t,l.id,scopeKey).available);}
 
 function question(input,id,fail){
- const q={...input,id:/^[\w-]{1,100}$/.test(String(input?.id||''))?String(input.id):randomUUID(),prompt:clean(input?.prompt),kind:input?.kind||'short',answer:clean(input?.answer,2000),explanation:clean(input?.explanation),stage:input?.stage||'practice',difficulty:input?.difficulty||'Beginner'};
+ const q={...input,id:/^[\w-]{1,100}$/.test(String(input?.id||''))?String(input.id):randomUUID(),prompt:clean(input?.prompt),kind:input?.kind||'short',answer:clean(input?.answer,2000),explanation:clean(input?.explanation),stage:input?.stage||'practice',difficulty:input?.difficulty||'Beginner',skill:clean(input?.skill,120)};
+ if(!q.skill)delete q.skill;
  if(!q.prompt||(!q.answer&&q.kind!=='multi')||!q.explanation||!['numeric','choice','multi','boolean','short','fill','matching','steps','graph','expression'].includes(q.kind))fail(400,'Every question needs a prompt, answer, answer type and explanation.');
  if(q.kind==='choice'){q.options=(input.options||[]).map(v=>clean(v,1000));if(q.options.length<2||!q.options.includes(q.answer))fail(400,'Multiple-choice answers must match one of at least two options.');}
  if(q.kind!=='multi')delete q.answers;
@@ -97,7 +98,7 @@ export function prepareAssignment(b,ctx,teacher,fail,previous){
  if(b.questions!==undefined){
   if(!Array.isArray(b.questions)||b.questions.length>100)fail(400,'Add up to 100 questions to an assignment.');
   // Drafts keep half-written questions; the full check runs when the assignment is released.
-  const KEEP=['id','prompt','kind','answer','answers','accepted','options','explanation','hint','tolerance','marks','difficulty','variables'];
+  const KEEP=['id','prompt','kind','answer','answers','accepted','options','explanation','hint','tolerance','marks','difficulty','variables','skill'];
   questions=b.questions.map((q,i)=>open?{...question(q,'assignment-'+(i+1),fail),stage:'assignment'}:{...Object.fromEntries(KEEP.filter(k=>q?.[k]!==undefined).map(k=>[k,typeof q[k]==='string'?clean(q[k],2000):structuredClone(q[k])])),id:/^[\w-]{1,100}$/.test(String(q?.id||''))?String(q.id):randomUUID(),stage:'assignment',...(q?.image?.fileId?{image:{fileId:clean(q.image.fileId,100),alt:clean(q.image.alt,300)}}:{})});
   if(new Set(questions.map(q=>q.id)).size!==questions.length)fail(400,'Question IDs must be unique.');
  }
@@ -115,10 +116,25 @@ export function studentAssignment(a){
 }
 const lateness=a=>!!a.due&&Date.now()>Date.parse(a.due.length===10?a.due+'T23:59:59+01:00':a.due);
 
+// Skill tags are free of stray spaces even in private drafts, and an empty tag is dropped.
+function tidySkills(week){
+ const fix=list=>{for(const q of Array.isArray(list)?list:[]){if(!q||typeof q!=='object'||!('skill' in q))continue;const v=String(q.skill??'').trim().replace(/\s+/g,' ').slice(0,120);if(v)q.skill=v;else delete q.skill;}};
+ for(const l of week?.lessons||[])fix(l.questions);fix(week?.quiz);
+}
 export async function weeklyContentApi(x){
  const {endpoint,method,url,b,u,c,s,t,scope,termAccess,lessonAccess,course,releaseState,scopeKey,audit,json,fail}=x;
  const ctx={sessionId:academicSession(),class:c,subject:s,term:t},fits=v=>v.sessionId===ctx.sessionId&&v.class===c&&v.subject===s&&v.term===t;
  const staff=()=>{if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Teacher access required.');scope(u,c,s);};
+ if(endpoint==='skills'&&['GET','POST'].includes(method)){
+  staff();db.skills??={};const list=db.skills[s]??=[];const norm=v=>clean(v,120).replace(/\s+/g,' ');
+  if(method==='POST'){
+   const name=norm(b.name),remove=b.remove===true;if(!name)fail(400,'Write the skill name.');
+   if(remove){if(u.role!=='ADMIN')fail(403,'Only the administrator can remove a skill.');db.skills[s]=list.filter(v=>v.toLowerCase()!==name.toLowerCase());audit(u,'Removed skill '+name+' from '+s);}
+   else{if(list.length>=200)fail(400,'This subject already has 200 skills.');if(!list.some(v=>v.toLowerCase()===name.toLowerCase())){list.push(name);list.sort((a,z)=>a.localeCompare(z,'en',{sensitivity:'base'}));audit(u,'Added skill '+name+' to '+s);}}
+   await save();
+  }
+  json({subject:s,skills:db.skills[s]||[]});return true;
+ }
  if(endpoint==='weekly-history'&&method==='GET'){
   staff();const id=Number(url.searchParams.get('week')),version=url.searchParams.get('version');
   if(!Number.isInteger(id)||id<1||id>52)fail(400,'Choose a valid week.');
@@ -158,6 +174,7 @@ export async function weeklyContentApi(x){
   const wanted=Array.isArray(b.release?.lessons)&&b.release.lessons.length?new Set(b.release.lessons):null;
   const lenient=lesson=>b.publish!==true||(!!wanted&&!wanted.has(lesson.id));
   validateWeekDocuments(b.week,{lenientFor:lenient});
+  tidySkills(b.week);
   if(b.assignments!==undefined&&(!Array.isArray(b.assignments)||b.assignments.length>30))fail(400,'Add up to 30 assignments.');
   // Inherit from the published source, not an abandoned draft: "Load published
   // version" must be able to discard blocks introduced only in that draft.

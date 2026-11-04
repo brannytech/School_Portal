@@ -32,7 +32,7 @@ function imageField(q,prefix){
  const img=q.image;
  return `<div class="st-qimage"><span class="small"><strong>Picture (optional)</strong></span>${img?.fileId?`<img class="st-image-thumb" src="/api/media/${encodeURIComponent(img.fileId)}" alt="">`:''}<div class="st-actions">${button('qimage-pick-'+prefix,img?.fileId?'Replace picture':'Add a picture or diagram')}${img?.fileId?button('qimage-remove-'+prefix,'Remove picture'):''}</div>${img?.fileId?input('Describe the picture for learners who cannot see it',prefix+'.imageAlt',img.alt||'','text','maxlength="300"'):''}</div>`;
 }
-export function questionPanelHTML({questions,index,quiz,bank}){
+export function questionPanelHTML({questions,index,quiz,bank,skills=[]}){
  const prefix=bank||(quiz?'quiz':'practice'),i=Math.max(0,Math.min(index,questions.length-1)),q=questions[i];
  return `<section class="st-bank" data-bank-panel="${prefix}"><div class="st-pane-head"><h2>${prefix==='assign'?'Assignment questions':quiz?'Weekly quiz':'Practice questions'}</h2><span class="small muted">${questions.length} question${questions.length===1?'':'s'}</span></div>
  <p class="small muted">${prefix==='assign'?'Students answer these on the platform. Answers stay hidden until they submit.':quiz?'This quiz covers the whole week.':'These questions belong to the selected subtopic.'} ${prefix==='assign'?'Add at least one question before releasing an online assignment.':'Questions are optional: you can publish a lesson without them.'}</p>
@@ -43,6 +43,7 @@ export function questionPanelHTML({questions,index,quiz,bank}){
  ${q.kind==='choice'||q.kind==='multi'?area('Choices (one per line)',prefix+'.options',(q.options||[]).join('\n')):''}
  <div data-answer-wrap="${prefix}">${answerInput(q,prefix)}</div>${kindSettings(q,prefix)}
  <div class="st-row">${input('Marks',prefix+'.marks',q.marks??1,'number','min="1" max="100" step="any"')}${select('Difficulty',prefix+'.difficulty',DIFFICULTIES.map(v=>[v,v]),q.difficulty||'Beginner')}</div>
+ ${skillField(q,prefix,skills)}
  ${input('Hint (optional)',prefix+'.hint',q.hint||'')}${area('Feedback / worked solution',prefix+'.explanation',q.explanation)}`:'<p>No questions yet.</p>'}
  <div class="st-actions">${button('add-'+prefix,'Add question')}${q?button('duplicate-'+prefix,'Duplicate')+button('up-'+prefix,'↑ Move up',i?'':'disabled')+button('down-'+prefix,'↓ Move down',i<questions.length-1?'':'disabled')+button('remove-'+prefix,'Delete selected question','class="danger"'):''}</div>
  <details class="st-import"><summary>Import questions (paste, spreadsheet or file)</summary>
@@ -169,3 +170,10 @@ export function questionsFromCSV(text,{stage='practice',makeId}={}){
 }
 
 export const IMPORT_TEMPLATE='kind,prompt,optionA,optionB,optionC,optionD,answer,marks,hint,explanation\nchoice,Which of these is a prime number?,4,6,7,9,C,1,,7 has only two factors.\nmulti,Pick the even numbers,2,3,4,5,A|C,2,,2 and 4 divide by 2.\nboolean,A triangle has three sides.,,,,,true,1,,\nnumeric,What is 3 × 4?,,,,,12,1,,Three fours.\nshort,Name the longest side of a right-angled triangle.,,,,,hypotenuse,1,,\n';
+
+// A fixed skill list per subject keeps the spelling consistent, so the same skill always groups together on the support board.
+function skillField(q,prefix,skills){
+ const list=[...new Set([...(skills||[]),...(q.skill&&!(skills||[]).includes(q.skill)?[q.skill]:[])])];
+ return `<div class="st-skill"><label>What skill does this test?<select data-path="${prefix}.skill"><option value="">No skill yet</option>${list.map(v=>`<option value="${esc(v)}" ${v===q.skill?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+ <div class="st-row"><label>Add a new skill<input data-new-skill type="text" maxlength="120" placeholder="e.g. Adding fractions with unlike denominators"></label><button type="button" data-studio="add-skill" data-bank="${prefix}">Add skill</button></div></div>`;
+}

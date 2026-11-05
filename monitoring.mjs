@@ -2,7 +2,7 @@ import {db,sql,save} from './store.mjs';
 import {randomUUID} from 'node:crypto';
 import {academicSession} from './context.mjs';
 import {rememberLearningReleases} from './learning-releases.mjs';
-import {classSupport,defaultSupportSettings} from './support.mjs';
+import {classSupport,defaultSupportSettings,measureTarget,planOutcome,planActions} from './support.mjs';
 
 const ratio=(done,total)=>({done,total,percent:total?Math.round(done/total*10000)/100:0});
 export const monitoringCategories=['content','exercises','quizzes','reflections','assignments'];
@@ -55,7 +55,7 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   }
   json({settings:{...defaultSupportSettings,...(db.supportSettings||{})},defaults:defaultSupportSettings});return true;
  }
- if(endpoint==='support'&&method==='GET'){
+ const supportContext=async()=>{
   if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);
   if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Choose a valid class and subject.');
   const sessionId=academicSession(),history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState),released=new Set(history.map(r=>r.lesson));
@@ -66,10 +66,47 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   const students=db.users.filter(x=>x.role==='STUDENT'&&x.status==='ACTIVE'&&db.enrolments.some(e=>e.student===x.id&&e.sessionId===sessionId&&e.class===c));
   const seen=new Map((await sql.all('SELECT user_id,last_seen FROM student_presence')).map(r=>[r.user_id,r.last_seen]));
   const settings={...defaultSupportSettings,...(db.supportSettings||{})};
-  const result=classSupport(students.map(x=>({id:x.id,name:x.name})),weeks,records,{settings,seen,records});
+  return {sessionId,weeks,fits,records,students,seen,settings};
+ };
+ // Plans whose due date has passed are measured once, and the result is kept for good.
+ const livePlans=async(ctx,only)=>{
+  db.supportPlans??=[];const mine=db.supportPlans.filter(p=>ctx.fits(p)&&(!only||p.student===only));let changed=false;
+  const out=mine.map(plan=>{
+   const after=measureTarget(plan,ctx.weeks,ctx.records,{settings:ctx.settings,sinceStart:true});
+   if(plan.status==='OPEN'&&!plan.result){const result=planOutcome(plan,after);if(result){plan.result=result;plan.status='CLOSED';changed=true;}}
+   const week=ctx.weeks.find(w=>w.id===Number(plan.week));
+   return {...plan,topic:week?.title||'Week '+plan.week,progress:{score:after.score,level:after.level,answers:after.answers},actionLabel:planActions[plan.action]||plan.action};
+  });
+  if(changed)await save();return out;
+ };
+ if(endpoint==='support'&&method==='GET'){
+  const ctx=await supportContext();
+  const result=classSupport(ctx.students.map(x=>({id:x.id,name:x.name})),ctx.weeks,ctx.records,{settings:ctx.settings,seen:ctx.seen,records:ctx.records});
+  const plans=await livePlans(ctx);
+  for(const row of result.students)row.openPlans=plans.filter(p=>p.student===row.id&&p.status==='OPEN').length;
   const only=url.searchParams.get('student');
-  if(only){const row=result.students.find(r=>r.id===only);if(!row)fail(404,'Student not found in this class.');json({student:row,settings,generatedAt:new Date().toISOString()});return true;}
-  json({...result,weeks:weeks.map(w=>({id:w.id,title:w.title})),generatedAt:new Date().toISOString()});return true;
+  if(only){const row=result.students.find(r=>r.id===only);if(!row)fail(404,'Student not found in this class.');json({student:row,plans:plans.filter(p=>p.student===only),weeks:ctx.weeks.map(w=>({id:w.id,title:w.title})),settings:ctx.settings,generatedAt:new Date().toISOString()});return true;}
+  json({...result,weeks:ctx.weeks.map(w=>({id:w.id,title:w.title})),generatedAt:new Date().toISOString()});return true;
+ }
+ if(endpoint==='support-plan'&&method==='POST'){
+  const ctx=await supportContext();
+  const student=ctx.students.find(x=>x.id===b.student);if(!student)fail(404,'Student not found in this class.');
+  const week=ctx.weeks.find(w=>w.id===Number(b.week));if(!week)fail(400,'Choose a released topic.');
+  const skill=String(b.skill||'').trim().slice(0,120);if(skill&&!(db.skills?.[s]||[]).some(v=>v.toLowerCase()===skill.toLowerCase()))fail(400,'Choose a skill from this subject’s list, or leave it blank for the whole topic.');
+  const action=String(b.action||'');if(!planActions[action])fail(400,'Choose an action.');
+  const target=Number(b.target);if(!Number.isFinite(target)||target<1||target>100)fail(400,'The target must be between 1 and 100.');
+  const start=new Date().toISOString(),due=new Date(String(b.due||'')+'T00:00:00Z');
+  if(Number.isNaN(due.getTime()))fail(400,'Choose a due date.');const days=Math.round((due.getTime()-Date.now())/86400000);if(days<1||days>90)fail(400,'The due date must be between 1 and 90 days from today.');
+  db.supportPlans??=[];if(db.supportPlans.some(p=>ctx.fits(p)&&p.student===student.id&&p.status==='OPEN'&&p.week===week.id&&(p.skill||'')===skill))fail(409,'This child already has an open plan for that topic.');
+  const plan={id:randomUUID(),sessionId:ctx.sessionId,class:c,subject:s,term:t,student:student.id,studentName:student.name,week:week.id,skill:skill||undefined,action,notes:String(b.notes||'').trim().slice(0,1000),start,due:due.toISOString().slice(0,10),target,owner:u.id,ownerName:u.name,status:'OPEN',baseline:measureTarget({student:student.id,week:week.id,skill},ctx.weeks,ctx.records,{settings:ctx.settings}),created:start};
+  db.supportPlans.push(plan);audit(u,`Started support plan for ${student.name}: ${week.title}${skill?' / '+skill:''}`);await save();json({plan});return true;
+ }
+ if(endpoint==='support-plan-close'&&method==='POST'){
+  const ctx=await supportContext();db.supportPlans??=[];
+  const plan=db.supportPlans.find(p=>p.id===b.id&&ctx.fits(p));if(!plan)fail(404,'Plan not found.');
+  if(plan.result){json({plan});return true;}
+  const after=measureTarget(plan,ctx.weeks,ctx.records,{settings:ctx.settings,sinceStart:true});
+  plan.result=planOutcome(plan,after,Date.now(),{force:true});plan.status='CLOSED';plan.closedEarly=true;audit(u,`Closed support plan early for ${plan.studentName}`);await save();json({plan});return true;
  }
  const personal=endpoint==='my-progress';
  if((endpoint!=='monitoring'&&!personal)||method!=='GET')return false;

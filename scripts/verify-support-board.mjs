@@ -25,6 +25,14 @@ try{
   const scroll=await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1);assert(scroll,'horizontal scroll at '+size.width);check(role+': no sideways scrolling at '+size.width+' px');
   await page.locator('[data-action="support-filter"][data-status="needs_support"]').click();assert((await page.locator('.support-row').count())>=1);check(role+': tapping a count filters the list');
   await weak.locator('button').click();await page.locator('#modal .support-flags').waitFor();assert((await page.locator('#modal').innerText()).includes('Suggested'));check(role+': profile shows flags, evidence and suggested action');
+  if(role==='admin'){
+   await page.locator('[data-action="support-plan-new"]').click();await page.locator('#sp-w').waitFor();await page.locator('#sp-t').fill('70');await page.locator('#sp-n').fill('Small group on Tuesday');
+   await page.locator('[data-action="support-plan-save"]').click();await page.locator('.support-row',{hasText:'Support plan open'}).first().waitFor();check('admin: a support plan is started and the board shows it');
+   await page.locator('.support-row',{hasText:'Support plan open'}).first().locator('button').click();await page.locator('#modal .support-plan').waitFor();assert((await page.locator('#modal').innerText()).includes('Target 70%'));check('admin: the profile shows the plan, target and starting score');
+   await page.locator('[data-action="support-plan-close"]').click();await page.locator('.support-row').first().waitFor();await page.waitForTimeout(500);
+   await page.locator('.support-row').filter({hasNotText:'Support plan open'}).first().locator('button').click();await page.locator('#modal .support-flags').waitFor();
+   check('admin: closing a plan measures it and removes the open-plan marker');
+  }
   await page.keyboard.press('Escape');
   await page.locator('[data-action="support-how"]').click();await page.locator('#modal',{hasText:'first try only'}).waitFor();check(role+': "How we calculate this" explains the rules');await page.keyboard.press('Escape');
   if(role==='admin'){await page.locator('[data-action="support-rules"]').click();await page.locator('#sr-d').fill('90');await page.locator('#sr-p').fill('80');await page.locator('[data-action="support-rules-save"]').click();await page.locator('#support-rules-error',{hasText:'must rise'}).waitFor();check('admin: invalid rules are refused with a clear message');await page.keyboard.press('Escape');}

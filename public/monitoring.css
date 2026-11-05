@@ -14,3 +14,5 @@
 .support-name{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.support-chips{display:flex;flex-wrap:wrap;gap:6px}.support-chip{padding:2px 8px;border-radius:999px;background:var(--soft);font-size:.85rem}
 .support-badge{padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}.support-badge.bad,.support-count.bad strong{color:#a40e26}.support-badge.warn,.support-count.warn strong{color:#8a5300}.support-badge.ok,.support-count.ok strong{color:#17692f}.support-badge.muted,.support-count.muted strong{color:#4d5a66}
 .heat{text-align:center}.heat.bad{background:#fbdada}.heat.warn{background:#fdecc8}.heat.ok{background:#d8f1df}.heat.muted,.heat.thin{background:#eceff2}.support-reteach{margin:10px 0}.support-flags{padding-left:18px}.support-flags li{margin-bottom:10px}
+.support-plan{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line);list-style:none}
+.support-plans{padding-left:0}

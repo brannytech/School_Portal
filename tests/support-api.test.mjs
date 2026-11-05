@@ -69,5 +69,27 @@ test('Support monitor API: staff only, evidence-based status, admin-editable rul
    const again=await req('support-plan-close',{id:made.value.plan.id},teacher);assert.deepEqual(again.value.plan.result,closed.value.plan.result);
    assert.equal((await req('support?student=student2',null,teacher)).value.student.openPlans,0);
   });
+ await t.test('parent report: figures match the Monitor, only wording is editable, release is admin-only and final',async()=>{
+   assert.equal((await req('report-draft?student=student2',null,student)).status,403);
+   const draft=await req('report-draft?student=student2',null,teacher);assert.equal(draft.status,200);
+   const r=draft.value.report,math=r.sections.find(x=>x.subject==='Mathematics');assert.ok(math,'Mathematics section');
+   const board=(await req('support',null,teacher)).value.students.find(x=>x.id==='student2');
+   assert.equal(math.overall,Math.round(board.overall));assert.equal(r.student.name,'Chisom Okafor');assert.equal(r.student.admission,'GF/2026/002');
+   assert.ok(r.homeSuggestions.length>=1&&r.homeSuggestions.length<=3);assert.match(r.footer,/confidential/);
+   assert.equal((await req('report-draft?student=outside',null,teacher)).status,404);
+   const all=await req('report-draft',null,teacher);assert.ok(all.value.reports.length>=2,'whole class');
+   const saved=await req('report-save',{student:'student2',status:'DRAFT',overallComment:'  Chisom needs a small-group session.  ',subjectComments:{Mathematics:'Edited by the teacher.'},data:{glance:{overall:100}}},teacher);
+   assert.equal(saved.status,200);assert.equal(saved.value.report.status,'DRAFT');
+   const got=await req('report-get?id='+saved.value.report.id,null,teacher);assert.equal(got.value.report.data.overallComment,'Chisom needs a small-group session.');assert.equal(got.value.report.data.sections[0].comment,'Edited by the teacher.');
+   assert.equal(got.value.report.data.glance.overall,r.glance.overall,'the browser cannot change the figures');
+   const reviewed=await req('report-save',{id:saved.value.report.id,student:'student2',status:'REVIEWED'},teacher);assert.equal(reviewed.value.report.status,'REVIEWED');
+   assert.equal((await req('report-save',{id:saved.value.report.id,student:'student2',status:'RELEASED'},teacher)).status,403);
+   const released=await req('report-save',{id:saved.value.report.id,student:'student2',status:'RELEASED'},admin);assert.equal(released.status,200);assert.equal(released.value.report.status,'RELEASED');
+   assert.equal((await req('report-save',{id:saved.value.report.id,student:'student2',status:'DRAFT',overallComment:'changed'},admin)).status,409);
+   const dl=await req('report-get?download=1&id='+saved.value.report.id,null,admin);assert.equal(dl.value.report.downloads,1);
+   const v2=await req('report-save',{student:'student2',status:'DRAFT'},admin);assert.equal(v2.value.report.version,2);
+   const list=await req('report-list?student=student2',null,teacher);assert.equal(list.value.reports.length,2);
+   assert.equal((await req('report-get?id='+saved.value.report.id,null,student)).status,403);
+  });
  }finally{await new Promise(r=>{if(server.exitCode!==null)return r();server.once('exit',r);server.kill();});}
 });

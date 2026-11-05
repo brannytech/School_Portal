@@ -1,3 +1,4 @@
+window.__supportLoaded=true;
 // Support board (plan section 12): who needs help, why, and what to do. Staff only.
 let supportLast=null,supportView='board',supportFilter='all',supportData=null,supportRequest=0,supportContext='';
 const supportStatus={needs_support:['Needs support now','bad'],watch:['Watch','warn'],on_track:['On track','ok'],excelling:['Excelling','ok'],no_evidence:['No evidence yet','muted']};
@@ -9,8 +10,9 @@ progressPage=function(){
  if(!staff())return supportPrevious();
  const context=user.id+'|'+academicId+'|'+className+'|'+subject+'|'+term;
  if(context!==supportContext){supportContext=context;supportData=null;supportFilter='all';}
- const tabs=`<div class="support-tabs" role="tablist" aria-label="Monitor view">${[['board','Support board'],['work','Work completed']].map(([k,l])=>`<button role="tab" aria-selected="${supportView===k}" class="${supportView===k?'active':''}" data-action="support-view" data-view="${k}">${l}</button>`).join('')}</div>`;
+ const tabs=`<div class="support-tabs" role="tablist" aria-label="Monitor view">${[['board','Support board'],['report','Parent report'],['work','Work completed']].map(([k,l])=>`<button role="tab" aria-selected="${supportView===k}" class="${supportView===k?'active':''}" data-action="support-view" data-view="${k}">${l}</button>`).join('')}</div>`;
  if(supportView==='work')return tabs+supportPrevious();
+ if(supportView==='report')return heading('Parent report','Progress report for each child, ready to print or save as PDF.','')+tabs+reportShell();
  return heading('Who needs help today?','Understanding is measured from practice, quizzes and marked assignments. Work done is shown separately.',btn('support-refresh','Refresh')+(user.role==='ADMIN'?' '+btn('support-rules','Rules'):'')+' '+btn('support-how','How we calculate this'))+tabs+'<div id="support-board" aria-live="polite" aria-busy="true"><p class="muted">Loading…</p></div>';
 };
 function supportStrip(data){

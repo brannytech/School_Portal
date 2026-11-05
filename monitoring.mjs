@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {academicSession} from './context.mjs';
 import {rememberLearningReleases} from './learning-releases.mjs';
 import {classSupport,defaultSupportSettings,measureTarget,planOutcome,planActions} from './support.mjs';
+import {subjectSection,buildReport,filterPeriod} from './report.mjs';
 
 const ratio=(done,total)=>({done,total,percent:total?Math.round(done/total*10000)/100:0});
 export const monitoringCategories=['content','exercises','quizzes','reflections','assignments'];
@@ -55,7 +56,7 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   }
   json({settings:{...defaultSupportSettings,...(db.supportSettings||{})},defaults:defaultSupportSettings});return true;
  }
- const supportContext=async()=>{
+ const supportContextFor=async(c,s,t)=>{
   if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');scope(u,c,s);
   if(!db.classes.includes(c)||!db.subjects.includes(s))fail(400,'Choose a valid class and subject.');
   const sessionId=academicSession(),history=await rememberLearningReleases(c,s,t,course,scopeKey,releaseState),released=new Set(history.map(r=>r.lesson));
@@ -66,8 +67,9 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   const students=db.users.filter(x=>x.role==='STUDENT'&&x.status==='ACTIVE'&&db.enrolments.some(e=>e.student===x.id&&e.sessionId===sessionId&&e.class===c));
   const seen=new Map((await sql.all('SELECT user_id,last_seen FROM student_presence')).map(r=>[r.user_id,r.last_seen]));
   const settings={...defaultSupportSettings,...(db.supportSettings||{})};
-  return {sessionId,weeks,fits,records,students,seen,settings};
+  return {sessionId,weeks,fits,records,students,seen,settings,c,s,t};
  };
+ const supportContext=()=>supportContextFor(c,s,t);
  // Plans whose due date has passed are measured once, and the result is kept for good.
  const livePlans=async(ctx,only)=>{
   db.supportPlans??=[];const mine=db.supportPlans.filter(p=>ctx.fits(p)&&(!only||p.student===only));let changed=false;
@@ -107,6 +109,70 @@ export async function monitoringApi({endpoint,method,url,b,u,c,s,t,scope,course,
   if(plan.result){json({plan});return true;}
   const after=measureTarget(plan,ctx.weeks,ctx.records,{settings:ctx.settings,sinceStart:true});
   plan.result=planOutcome(plan,after,Date.now(),{force:true});plan.status='CLOSED';plan.closedEarly=true;audit(u,`Closed support plan early for ${plan.studentName}`);await save();json({plan});return true;
+ }
+ // ---- Parent report (plan section 13): staff only, saved as snapshots, never a public link ----
+ const reportPeriod=()=>{const day=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):'';return {from:day(b.from??url.searchParams.get('from')),to:day(b.to??url.searchParams.get('to'))};};
+ const reportBuild=async(studentId,period)=>{
+  const subjects=[];let student=null,sessionId=academicSession();
+  for(const subject of db.subjects){
+   let ctx;try{ctx=await supportContextFor(c,subject,t);}catch(error){if(error.status===403||error.status===400)continue;throw error;}
+   if(!ctx.weeks.length)continue;
+   const found=ctx.students.find(x=>x.id===studentId);if(!found)continue;student=found;sessionId=ctx.sessionId;
+   const alloc=db.allocations.find(a=>a.class===c&&a.subject===subject&&a.sessionId===ctx.sessionId),teacher=alloc?db.users.find(x=>x.id===alloc.teacher)?.name:'';
+   const scores=(db.scores||[]).filter(x=>x.student===studentId&&x.class===c&&x.subject===subject&&x.term===t);
+   subjects.push(subjectSection({student:{id:found.id,name:found.name},subject,teacher,weeks:ctx.weeks,records:ctx.records,scores,now:Date.now(),lastSeen:ctx.seen.get(found.id)||null,settings:ctx.settings,period}));
+  }
+  if(!student){const any=db.users.find(x=>x.id===studentId&&x.role==='STUDENT'&&db.enrolments.some(e=>e.student===x.id&&e.class===c));if(!any)fail(404,'Student not found in this class, or none of your subjects are released for this class yet.');student=any;}
+  const full=db.users.find(x=>x.id===studentId);
+  const brand=db.branding||{},sessionName=db.sessions.find(x=>x.id===sessionId)?.name||sessionId;
+  return buildReport({student:{id:full.id,name:full.name,admission:full.admission||'',class:c},school:{name:db.school.name,motto:db.school.motto||'',address:brand.address||'',phone:brand.phone||'',principal:brand.principal||''},session:sessionName,term:t,period,sections:subjects,settings:{...defaultSupportSettings,...(db.supportSettings||{})}});
+ };
+ const reportClean=(v,max)=>String(v??'').replace(/\r/g,'').trim().slice(0,max);
+ const reportMeta=r=>({id:r.id,student:r.student,studentName:r.studentName,class:r.class,term:r.term,period:r.period,status:r.status,version:r.version,created:r.created,createdBy:r.createdByName,reviewedAt:r.reviewedAt,releasedAt:r.releasedAt,releasedBy:r.releasedByName,downloads:r.downloads.length});
+ const reportAllowed=r=>{if(u.role==='ADMIN')return true;return db.allocations.some(a=>a.teacher===u.id&&a.class===r.class);};
+ if(endpoint==='report-draft'&&method==='GET'){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');
+  const only=url.searchParams.get('student');
+  if(only){json({report:await reportBuild(only,reportPeriod())});return true;}
+  const sessionId=academicSession(),ids=db.users.filter(x=>x.role==='STUDENT'&&x.status==='ACTIVE'&&db.enrolments.some(e=>e.student===x.id&&e.sessionId===sessionId&&e.class===c)).sort((a,z)=>a.name.localeCompare(z.name));
+  const reports=[];for(const st of ids){try{reports.push(await reportBuild(st.id,reportPeriod()));}catch(error){if(error.status!==404)throw error;}}
+  json({reports});return true;
+ }
+ if(endpoint==='report-list'&&method==='GET'){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');
+  const only=url.searchParams.get('student');
+  json({reports:(db.reportSnapshots||[]).filter(r=>r.class===c&&r.term===t&&(!only||r.student===only)&&reportAllowed(r)).sort((a,z)=>z.created.localeCompare(a.created)).map(reportMeta)});return true;
+ }
+ if(endpoint==='report-get'&&method==='GET'){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');
+  const r=(db.reportSnapshots||[]).find(x=>x.id===url.searchParams.get('id'));if(!r||!reportAllowed(r))fail(404,'Report not found.');
+  if(url.searchParams.get('download')==='1'){r.downloads.push({by:u.id,byName:u.name,at:new Date().toISOString()});audit(u,`Downloaded parent report for ${r.studentName}`);await save();}
+  let data=r.data;
+  if(u.role!=='ADMIN'){const mine=new Set(db.allocations.filter(a=>a.teacher===u.id&&a.class===r.class).map(a=>a.subject));data={...data,sections:data.sections.filter(x=>mine.has(x.subject))};}
+  json({report:{...reportMeta(r),data}});return true;
+ }
+ if(endpoint==='report-save'&&method==='POST'){
+  if(!['ADMIN','TEACHER'].includes(u.role))fail(403,'Staff access required.');
+  const status=String(b.status||'DRAFT');if(!['DRAFT','REVIEWED','RELEASED'].includes(status))fail(400,'Unknown report status.');
+  if(status==='RELEASED'&&u.role!=='ADMIN')fail(403,'Only the administrator can release a report.');
+  db.reportSnapshots??=[];const period=reportPeriod();
+  // The server rebuilds every figure itself; the browser can only change the wording.
+  const data=await reportBuild(String(b.student||''),period);
+  if(u.role!=='ADMIN'){const mine=new Set(db.allocations.filter(a=>a.teacher===u.id&&a.class===c).map(a=>a.subject));if(!mine.size)fail(403,'This class is not assigned to you.');}
+  const comments=b.subjectComments&&typeof b.subjectComments==='object'?b.subjectComments:{};
+  for(const sec of data.sections)if(typeof comments[sec.subject]==='string')sec.comment=reportClean(comments[sec.subject],1500);
+  if(typeof b.overallComment==='string')data.overallComment=reportClean(b.overallComment,2000);
+  if(Array.isArray(b.homeSuggestions))data.homeSuggestions=b.homeSuggestions.map(v=>reportClean(v,300)).filter(Boolean).slice(0,5);
+  let r=b.id?db.reportSnapshots.find(x=>x.id===b.id):null;
+  if(b.id&&!r)fail(404,'Report not found.');
+  if(r&&r.class!==c)fail(400,'That report belongs to another class.');
+  if(r&&r.status==='RELEASED')fail(409,'A released report cannot be edited. Start a new version instead.');
+  const now=new Date().toISOString();
+  if(!r){const version=db.reportSnapshots.filter(x=>x.student===data.student.id&&x.term===t&&x.class===c).length+1;r={id:randomUUID(),student:data.student.id,studentName:data.student.name,class:c,term:t,sessionId:academicSession(),version,created:now,createdBy:u.id,createdByName:u.name,downloads:[]};db.reportSnapshots.push(r);}
+  Object.assign(r,{period,data,status,edited:now,editedBy:u.id});
+  if(status==='REVIEWED'||status==='RELEASED'){r.reviewedAt=now;r.reviewedBy=u.id;}
+  if(status==='RELEASED'){r.releasedAt=now;r.releasedBy=u.id;r.releasedByName=u.name;}
+  audit(u,`${status==='RELEASED'?'Released':status==='REVIEWED'?'Reviewed':'Saved draft of'} parent report for ${r.studentName}`);await save();json({report:reportMeta(r)});return true;
  }
  const personal=endpoint==='my-progress';
  if((endpoint!=='monitoring'&&!personal)||method!=='GET')return false;

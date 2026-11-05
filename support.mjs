@@ -172,3 +172,30 @@ export function commonMistakes(students,week,records){
  }
  return [...per.entries()].sort((a,b)=>b[1].misses-a[1].misses).slice(0,3).map(([key,m])=>({question:valid.get(key).id,prompt:String(valid.get(key).prompt||'').slice(0,120),misses:m.misses,commonWrongAnswer:[...m.wrong.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||null}));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Support plans: a target for one child on one topic (or one skill), re-measured on the due date.
+// The "after" score uses only work done since the plan started, so old work cannot flatter the result.
+// ---------------------------------------------------------------------------------------------
+export const planActions={reteach:'Reteach in a small group',extra_practice:'Extra practice set',peer:'Pair with a peer',one_to_one:'One-to-one help',family_contact:'Contact the family'};
+const DAY=86400000;
+export function measureTarget(plan,weeks,records,{settings=defaultSupportSettings,sinceStart=false}={}){
+ const week=weeks.find(w=>w.id===Number(plan.week));if(!week)return {score:null,level:'none',answers:0};
+ const since=sinceStart?time(plan.start):0;
+ const rec=sinceStart?{...records,practiceAttempts:(records.practiceAttempts||[]).filter(a=>time(a.at)>=since),assessmentAttempts:(records.assessmentAttempts||[]).filter(a=>time(a.submitted||a.at||a.started)>=since)}:records;
+ const t=topicEvidence(plan.student,week,rec,settings);
+ if(plan.skill){const k=t.skills.find(k=>k.name===plan.skill);return k?{score:k.score,level:k.level,answers:k.answers}:{score:null,level:'none',answers:0};}
+ return {score:t.score,level:t.level,answers:t.evidence.answers};
+}
+// Returns the saved result, a new result once the due date has passed, or null while the plan is still running.
+export function planOutcome(plan,after,now=Date.now(),{force=false}={}){
+ if(plan.result)return plan.result;
+ const due=time(plan.due)+DAY;if(!force&&now<due)return null;
+ const before=plan.baseline?.score??null,target=Number(plan.target);
+ const done=outcome=>({outcome,before,after:after.score,answers:after.answers,at:new Date(now).toISOString()});
+ if(after.level!=='enough'||after.score===null)return done('NOT_ENOUGH_EVIDENCE');
+ if(after.score>=target)return done('MET');
+ if(before!==null&&after.score>before&&(after.score-before)>=(target-before)/2)return done('PARTLY');
+ return done('NOT_MET');
+}
+export const outcomeLabel={MET:'Target met',PARTLY:'Partly met',NOT_MET:'Not met',NOT_ENOUGH_EVIDENCE:'Not enough new work to judge'};

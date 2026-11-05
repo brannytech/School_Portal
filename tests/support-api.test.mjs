@@ -50,5 +50,24 @@ test('Support monitor API: staff only, evidence-based status, admin-editable rul
    const back=await req('weekly-template?week=9',null,teacher);const w=back.value.draft?.week||back.value.published;
    const qs=w.lessons[0].questions;assert.equal(qs.find(x=>x.id==='a').skill,'Adding fractions');assert.ok(!('skill' in qs.find(x=>x.id==='b')));assert.ok(!('skill' in qs.find(x=>x.id==='c')));assert.equal(w.quiz[0].skill,'Ratios');
   });
+ await t.test('support plans: staff create, duplicates and bad input are refused, results are kept',async()=>{
+   const due=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+   const body={student:'student2',week:1,action:'reteach',target:70,due,notes:'Small group on Tuesday'};
+   assert.equal((await req('support-plan',body,student)).status,403);
+   assert.equal((await req('support-plan',{...body,student:'outside'},teacher)).status,404);
+   assert.equal((await req('support-plan',{...body,week:99},teacher)).status,400);
+   assert.equal((await req('support-plan',{...body,target:0},teacher)).status,400);
+   assert.equal((await req('support-plan',{...body,action:'magic'},teacher)).status,400);
+   assert.equal((await req('support-plan',{...body,due:'2020-01-01'},teacher)).status,400);
+   assert.equal((await req('support-plan',{...body,skill:'Not in the list'},teacher)).status,400);
+   const made=await req('support-plan',body,teacher);assert.equal(made.status,200);assert.equal(made.value.plan.status,'OPEN');assert.ok(made.value.plan.baseline.score!==undefined);
+   assert.equal((await req('support-plan',body,teacher)).status,409);
+   const profile=await req('support?student=student2',null,teacher);assert.equal(profile.value.plans.length,1);assert.equal(profile.value.plans[0].actionLabel,'Reteach in a small group');assert.equal(profile.value.student.openPlans,1);
+   assert.equal((await req('support?student=student',null,teacher)).value.plans.length,0);
+   assert.equal((await req('support-plan-close',{id:made.value.plan.id},student)).status,403);
+   const closed=await req('support-plan-close',{id:made.value.plan.id},teacher);assert.equal(closed.status,200);assert.equal(closed.value.plan.status,'CLOSED');assert.ok(['MET','PARTLY','NOT_MET','NOT_ENOUGH_EVIDENCE'].includes(closed.value.plan.result.outcome));
+   const again=await req('support-plan-close',{id:made.value.plan.id},teacher);assert.deepEqual(again.value.plan.result,closed.value.plan.result);
+   assert.equal((await req('support?student=student2',null,teacher)).value.student.openPlans,0);
+  });
  }finally{await new Promise(r=>{if(server.exitCode!==null)return r();server.once('exit',r);server.kill();});}
 });

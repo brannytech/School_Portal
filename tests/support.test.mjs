@@ -131,3 +131,26 @@ test('class view lists skills the whole class finds hard',()=>{
  const out=classSupport(students,[w],records,{now:NOW,records});
  assert.equal(out.weakSkills[0].name,'Ratios');assert.ok(out.weakSkills[0].score<60);
 });
+
+import {measureTarget,planOutcome} from '../support.mjs';
+test('support plan: measures only work since the start, then Met / Partly / Not met / not enough evidence',()=>{
+ const w=week(1,20);
+ const old=attempts('s',1,10,3,10);        // before the plan: 30%
+ const plan={student:'s',week:1,start:ago(5),due:ago(1),target:70,baseline:{score:30}};
+ const run2=(right,n=10)=>measureTarget(plan,[w],{practiceAttempts:[...old,...attempts('s',1,n,right,2)],assessmentAttempts:[]},{sinceStart:true});
+ assert.equal(measureTarget({...plan},[w],{practiceAttempts:old,assessmentAttempts:[]}).score,30);   // whole history
+ assert.equal(run2(8).score,80);assert.equal(planOutcome(plan,run2(8),NOW).outcome,'MET');
+ assert.equal(planOutcome(plan,run2(6),NOW).outcome,'PARTLY');   // 60 is more than halfway from 30 to 70
+ assert.equal(planOutcome(plan,run2(3),NOW).outcome,'NOT_MET');  // 30, no gain
+ assert.equal(planOutcome(plan,run2(10,3),NOW).outcome,'NOT_ENOUGH_EVIDENCE'); // 3 answers is thin
+ assert.equal(planOutcome({...plan,due:ago(-5)},run2(8),NOW),null);              // not due yet
+ assert.equal(planOutcome({...plan,due:ago(-5)},run2(8),NOW,{force:true}).outcome,'MET');
+ const saved={outcome:'MET',before:30,after:90};assert.equal(planOutcome({...plan,result:saved},run2(0),NOW),saved);   // results never change afterwards
+});
+
+test('support plan: a skill target is measured on that skill only',()=>{
+ const w=tagged(1,['Ratios','Ratios','Ratios','Ratios','Ratios','Other','Other','Other','Other','Other','Other','Other']);
+ const rows=[...attempts('s',1,5,5,1),...attempts('s',1,12,0,1).slice(5)];
+ const got=measureTarget({student:'s',week:1,skill:'Ratios',start:ago(3)},[w],{practiceAttempts:rows,assessmentAttempts:[]},{sinceStart:true});
+ assert.equal(got.score,100);assert.equal(got.level,'enough');
+});

@@ -836,7 +836,7 @@ Replace every hard-coded "Grace-Field" in `public/app.js`, `index.html`, the man
 **Workflow for the owner:** write and release Week 1 onward in the pilot school; when a course is finished, export it, commit the file, deploy; other schools copy it and make their own edits.
 
 ### 16.6h What comes after the multi-school foundation
-Merge pull requests #4, #6, #7, #8, #9, #10, #11 and #12 in order. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
+Pull requests #4 to #18 are merged. Merge #19 (parent report). Open every new pull request against main. Then the product work in this order: V3.2m support monitor, V3.2r parent report, V3.2i lesson import, V3.2a audio and written answers, V3.3e learning events, then offline, architecture and accessibility. The staging host (section 16.6e) is bought when the pilot needs real users.
 
 ### 16.6e Hosting decision (2 November 2026)
 **One shared installation serves all schools.** Schools do not host their own copy: one place to update, back up and secure, lower cost per school, and minutes to onboard a school. A school that insists on a dedicated server (contract or data-location reasons) can be offered one as a premium option using the same code and `Dockerfile`.
@@ -995,3 +995,13 @@ Correction to section 19: the 1 to 5 confidence rating already existed on the le
 Support plans (PR #17): a teacher starts a plan for one child on one topic, or one skill: action (reteach, extra practice, pair with a peer, one-to-one, family contact), target score, due date (1 to 90 days), notes. The starting score is stored. When the due date passes, the next time the board or profile loads, the app measures only work done **after the plan started** and records **Target met** (at or above target), **Partly met** (more than halfway from the starting score to the target), **Not met**, or **Not enough new work to judge** (thin evidence is never called a failure). The saved result never changes afterwards. A teacher can close a plan early to measure it at once. Plans are staff-only, limited to the teacher's own class and subject, audited, and shown on the board as "Support plan open".
 
 Still open: form-teacher and cross-subject view, period selector, summary cache, pilot comparison, quizzes by skill, parent report (V3.2r).
+
+## 20. Parent report: status (PR #19)
+
+Delivered (first version of section 13): `report.mjs` engine (unit tested) uses the same figures as the Support board, so they cannot disagree (automated test). Per child: school header with crest, motto, address and phone, child (name, admission number, class, session, term), period (any dates or the whole term), at a glance, subjects table (teacher, understanding, band, lessons done, assignments with late count, trend), per-subject strengths, needs-help topics, skill to practise and test marks, rule-based comments where every number is checked against the figures (automated test), overall comment, up to three home suggestions, signature lines and a footer explaining the scoring. A child with thin evidence gets "Not enough work yet to judge", never a weak label.
+
+Workflow: preview a child or the whole class, edit the wording only (the server rebuilds every figure, so the browser cannot change a number), save as Draft, mark Reviewed, then the administrator releases. A released report is an immutable snapshot, edits are refused (409) and a new version is started instead; downloads and releases are logged. Teachers see only their own subjects. Printing uses a clean A4 copy (one child per page, no buttons); there is no public link and nothing is sent to anyone. Endpoints: `report-draft`, `report-save`, `report-list`, `report-get`.
+
+Also in this PR: the staff-only screens (support board, parent report) now load only when a staff member opens the Monitor. The sign-in page had grown past its 130 KB budget (132 KB); it is back to 123 KB. This was the first piece of the planned role-based script splitting.
+
+Not yet built from section 13: server-generated PDF file and the phone Share button (printing to PDF from the browser works today), form-teacher role, bulk "release all", photo, per-subject-teacher sign-off, home suggestions editing history. Still open from section 19: form-teacher and cross-subject view, period selector on the board, summary cache, pilot comparison, quizzes by skill.

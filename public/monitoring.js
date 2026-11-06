@@ -59,3 +59,11 @@ async function sendStudentPresence(){if(!navigator.onLine||user?.role!=='STUDENT
 for(const event of ['pointerdown','keydown','scroll'])document.addEventListener(event,()=>{studentInteraction=Date.now();sendStudentPresence();},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){studentInteraction=Date.now();sendStudentPresence();}});
 setInterval(sendStudentPresence,60000);
+
+// Staff-only screens (support board, parent report) are fetched only when a staff member opens the Monitor,
+// so students and the sign-in page never download them.
+(()=>{const base=progressPage;let loading=false;progressPage=function(){
+ if(!staff()||window.__supportLoaded)return base();
+ if(!loading){loading=true;Promise.all(['/support.js','/support-report.js'].map(src=>new Promise((ok,bad)=>{const el=document.createElement('script');el.src=src;el.onload=ok;el.onerror=bad;document.head.append(el);}))).then(()=>render()).catch(()=>{loading=false;});}
+ return heading('Class progress','Loading the support board…','')+'<p class="muted">One moment…</p>';
+};})();
